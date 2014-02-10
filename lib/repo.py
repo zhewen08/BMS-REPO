@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-# Copyright (c) 2012-2013 University of California, Los Angeles
+# Copyright (c) 2014 University of California, Los Angeles
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -25,18 +23,20 @@ from hashlib import md5
 
 from pyndn import NDN, Name, Interest, ContentObject, SignedInfo, Key, KeyLocator
 from pyndn import _pyndn
-from pyndn import CONTENT_DATA
+import pyndn
 
 from repo_exceptions import AddToRepoException, NoRootException, \
         UnsupportedQueryException
 
 import os
+import pickle
 
 LABEL_COMPONENT = "Component"
 LABEL_SEGMENT = "Segment"
 
 PROPERTY_COMPONENT = "component"
-PROPERTY_FILE = "file"
+PROPERTY_DATA = "file"
+PROPERTY_WRAPPED = "wrapped"
 
 RELATION_C2C = "CONTAINS_COMPONENT"
 RELATION_C2S = "CONTAINS_SEGMENT"
@@ -51,7 +51,7 @@ class Repo(object):
     # when calling NDN().getDefaultKey()
     # _key = NDN().getDefaultKey()
     _key.generateRSA(1024)
-    _key_locator = KeyLocator(_key)
+    # _key_locator = KeyLocator(_key)
 
     def __init__(self, server=None, port=None, db=None, clear=False):
         if not server:
@@ -98,38 +98,41 @@ class Repo(object):
 
         if not key:
             key = self._key
-            key_locator = self._key_locator
+            # key_locator = self._key_locator
 
         si = SignedInfo()
         si.publisherPublicKeyDigest = key.publicKeyID
-        si.type = CONTENT_DATA
+        si.type = pyndn.CONTENT_DATA
         si.freshnessSeconds = -1
-        si.keyLocator = key_locator
+        # si.keyLocator = key_locator
         co.signedInfo = si
 
         co.sign(key)
 
         return co
 
-    def save_to_disk(self, co):
+    def save_to_disk(self, name, data):
         """
-        @param co - content object to be written to disk
-        @return the file name of co on disk
-        writes given content object to disk under the md5 digest of its name
+        @param name - string representation of ndn name
+        @param data - data to be stored
+        @return the file name of data on disk
+        writes given data to disk under the md5 digest of its name
         """
-        file_name = md5(str(co.name)).hexdigest()
-        co_wired = _pyndn.dump_charbuf(co.ndn_data)
+        file_name = md5(name).hexdigest()
         try:
             with open(os.path.join(self._PATH, file_name), "wb") as fd:
-                fd.write(co_wired)
+                # fd.write(data)
+                pickle.dump(data, fd)
         except Exception as ex:
             raise AddToRepoException(ex)
 
         return file_name
 
-    def name_to_path(self, name, file_name=None):
+    def name_to_path(self, name, data=None, wrapped=True):
         """
         @param name - string representation of a ndn name
+        @param data - data to be stored in node
+        @param wrapped - whether the data is wrapped as a co
         @return list representation of this name using nodes and relations
         interprets the given string name into a list of nodes and relations
         """
@@ -150,11 +153,11 @@ class Repo(object):
             path.append(node)
             i += 1
 
-        if file_name:
+        if data:
             # any node is supposed to have AT MOST one RELATION_C2S
             rel = 'r%d:%s' % (i, RELATION_C2S)
-            node = 'n%d:%s {%s:"%s"}' % (i, LABEL_SEGMENT, PROPERTY_FILE, 
-                    file_name)
+            node = 'n%d:%s {%s:"%s", %s:"%s"}' % (i, LABEL_SEGMENT, 
+                    PROPERTY_DATA, data, PROPERTY_WRAPPED, wrapped)
             path.append(rel)
             path.append(node)
 
@@ -185,13 +188,13 @@ class Repo(object):
 
         return query
 
-    def add_to_graphdb(self, name, file_name):
+    def add_to_graphdb(self, name, data, wrapped):
         """
         @param name - name of a given content object
-        @param file_name - file name of co on disk
+        @param data - data to store under name
         adds a record describing the name and its co (on disk) to graphdb
         """
-        path = self.name_to_path(name, file_name)
+        path = self.name_to_path(name, data, wrapped)
 
         try:
             query = self.create_path_query(path, 'CREATE UNIQUE')
@@ -199,31 +202,44 @@ class Repo(object):
             raise AddToRepoException(str(ex))
         results = neo4j.CypherQuery(self.db_handler, query).execute()
 
-    def add_to_repo(self, name, content):
+    def add_to_repo(self, name, content, wrapped=True):
         """
         @param name - name of the content object
         @param content - the content to be wrapped and added
-        wraps the given content into a content object and adds it
+        @param wrap - whether to wrap name+content into a co
+        (wraps the given content into a content object and) adds it
         to the graph database under the specified name
         """
         name = str(Name(name))
-        co = self.wrap_content(name, content)
+        if wrapped:
+            co = self.wrap_content(name, content)
+            # data = _pyndn.dump_charbuf(co.ndn_data)
+            data = repr(co)
+        else:
+            data = content
         # create a leaf node containing the path to the content object, 
         # which itself will be stored in the filesystem as a file
         # use md5 digest of name as file name
         try:
-            file_name = self.save_to_disk(co)
+            data_ref = self.save_to_disk(name, data)
         except AddToRepoException as ex:
             print "Error: add_to_repo: %s" % str(ex)
+        else:
+            try:
+                self.add_to_graphdb(name, data_ref, wrapped)
+            except AddToRepoException as ex:
+                print "Error: add_to_repo: %s" % str(ex)
 
-        try:
-            self.add_to_graphdb(name, file_name)
-        except AddToRepoException as ex:
-            print "Error: add_to_repo: %s" % str(ex)
+    def read_from_disk(self, segment_node):
+        file_name = segment_node.get_properties()[PROPERTY_DATA]
+        with open(os.path.join(self._PATH, file_name)) as fd:
+            # return fd.read()
+            return pickle.load(fd)
 
-    def extract_from_repo(self, interest):
+    def extract_from_repo(self, interest, wired=False):
         """
         @param interest - the interest requesting a content object
+        @param wired - whether to return the wired format co
         @return the requested content object in wired format. if does not 
         exist return None
         searches and returns the repo for content object to fulfill the 
@@ -245,31 +261,23 @@ class Repo(object):
             return None
 
         last_node = records.data[0].values[0]
-        rel = last_node.match(RELATION_C2S).next()
-        if rel:
+
+        # TODO: apply selectors here. AT MOST one node shall be left 
+
+
+        try:
+            # by design, there is AT MOST one C2S relation for each node
+            rel = last_node.match(RELATION_C2S).next()
             # we found a content object under the exact given name
             segment_node = rel.end_node
-            file_name = segment_node.get_properties()[PROPERTY_FILE]
-            with open(os.path.join(self._PATH, file_name)) as fd:
-                # FIXME: fd.read() is the wired format co. how to construct 
-                # a ContentObject instance from it?
-                return fd.read()
-        else:
-            # TODO: apply selectors here
-            # find all outgoing relations
-            for rel in last_node.match_outgoing(RELATION_C2S):
-                print str(rel)
+            wrapped = eval(segment_node.get_properties()[PROPERTY_WRAPPED])
+            data = self.read_from_disk(segment_node)
+            if wrapped and not wired:
+                # decode wired co to ContentObject instance
+                co = eval(data)
+                return co
+            else:
+                # return either wired format co or raw data
+                return data
+        except StopIteration as ex:
             pass
-
-if __name__ == "__main__":
-    if __debug__:
-        repo = Repo(clear=True)
-        name = "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg0"
-        value = "seg0"
-        repo.add_to_repo(name, value)
-        name = "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1"
-        value = "seg1"
-        repo.add_to_repo(name, value)
-        name = "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1"
-        interest = Interest(Name(name))
-        co_wired = repo.extract_from_repo(interest)
