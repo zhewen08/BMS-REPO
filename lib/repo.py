@@ -21,7 +21,8 @@
 from py2neo import neo4j, cypher
 from hashlib import md5
 
-from pyndn import NDN, Name, Interest, ContentObject, SignedInfo, Key, KeyLocator
+from pyndn import NDN, Name, Interest, ContentObject, SignedInfo, Key, \
+        KeyLocator
 from pyndn import _pyndn
 import pyndn
 
@@ -41,6 +42,8 @@ PROPERTY_WRAPPED = "wrapped"
 RELATION_C2C = "CONTAINS_COMPONENT"
 RELATION_C2S = "CONTAINS_SEGMENT"
 
+MIN_SUFFIX_COMPS = 0
+MAX_SUFFIX_COMPS = 63
 
 class Repo(object):
     # default object path
@@ -135,20 +138,24 @@ class Repo(object):
         @param wrapped - whether the data is wrapped as a co
         @return list representation of this name using nodes and relations
         interprets the given string name into a list of nodes and relations
+        the first component in name, which is considered the start node,  will
+        be omitted in returned list
         """
         components = name.split('/')
+        if name[0] == '/':
+            components = components[1:]
         components = components[1:]
-        if components[0] != "ndn":
-            raise AddToRepoException("wrong root component")
 
         path = []
         i = 0
         for comp in components:
-            if comp == "ndn":
-                continue
             rel = 'r%d:%s' % (i, RELATION_C2C)
-            node = 'n%d:%s {%s:"%s"}' % (i, LABEL_COMPONENT, 
-                    PROPERTY_COMPONENT, comp)
+            if comp == 'ANY':
+                # use special symbol 'ANY' to refer to nodes with no property
+                node = 'n%d:%s' % (i, LABEL_COMPONENT)
+            else:
+                node = 'n%d:%s {%s:"%s"}' % (i, LABEL_COMPONENT, 
+                        PROPERTY_COMPONENT, comp)
             path.append(rel)
             path.append(node)
             i += 1
@@ -164,18 +171,23 @@ class Repo(object):
         return path
 
     @staticmethod
-    def create_path_query(path, action):
+    def create_path_query(path, action, start=None):
         """
         @param path - list of path nodes and relations
         @param action - action of the query, could be "MATCH" or 
                         "CREATE UNIQUE"
+        @param start - internal _id of start node
         @return the query
         creates a path query starting from root ("ndn")
         """
         supported_actions = ['MATCH', 'CREATE UNIQUE']
         if action.upper() in supported_actions:
-            query = 'START r=node:root(root_name = "ndn")\n' +\
-                    '%s (r)' % action.upper()
+            if not start:
+                query = 'START r=node:root(root_name = "ndn")\n' +\
+                        '%s (r)' % action.upper()
+            else:
+                query = 'START s=node({%s})\n' % start + \
+                        '%s (s)' % action.upper()
         else:
             raise UnsupportedQueryException("unsupported query")
 
@@ -231,10 +243,39 @@ class Repo(object):
                 print "Error: add_to_repo: %s" % str(ex)
 
     def read_from_disk(self, segment_node):
+        """
+        @param segment_node - the node contains (a reference) to the segment
+        @return data the node contains (either from property or reference disk)
+        reads the segment (co or raw data) from node
+        """
         file_name = segment_node.get_properties()[PROPERTY_DATA]
         with open(os.path.join(self._PATH, file_name)) as fd:
             # return fd.read()
             return pickle.load(fd)
+
+    def apply_min_max_suffix_components(self, last_node, 
+            min_suffix_components, max_suffix_components):
+        """
+        @param last_node - node from which to apply min suffix components
+        @param min_suffix_components - min suffix components
+        @param max_suffix_components - max suffix components
+        @return a list of nodes that fulfill the selector requirement
+        """
+        if not min_suffix_components:
+            min_suffix_components = MIN_SUFFIX_COMPS
+        if not max_suffix_components:
+            # virtually infinite
+            max_suffix_components = MAX_SUFFIX_COMPS
+
+        _id = last_node._id
+        query = 'START s=node(%s)\n' % _id + \
+                'MATCH (s)-[:%s*%d..%d]->(m)\n' % (RELATION_C2C, 
+                        min_suffix_components, max_suffix_components) + \
+                'RETURN (m)'
+        records = neo4j.CypherQuery(self.db_handler, query).execute()
+        nodes = [record.values[0] for record in records.data]
+
+        return nodes
 
     def extract_from_repo(self, interest, wired=False):
         """
@@ -242,8 +283,6 @@ class Repo(object):
         @param wired - whether to return the wired format co
         @return the requested content object in wired format. if does not 
         exist return None
-        searches and returns the repo for content object to fulfill the 
-        interest
         """
         name = str(interest.name)
         path = self.name_to_path(name)
@@ -256,14 +295,34 @@ class Repo(object):
         records = neo4j.CypherQuery(self.db_handler, query).execute()
         # in the name tree there should be AT MOST one match for a 
         # given name prefix
-        assert(len(records.data) <= 1)
-        if (len(records.data) == 0):
-            return None
-
+        assert(len(records.data) == 1)
+        assert(len(records.data[0].values) == 1)
         last_node = records.data[0].values[0]
 
         # TODO: apply selectors here. AT MOST one node shall be left 
+        # MinSuffixComponents
+        nodes = self.apply_min_max_suffix_components(last_node, 
+                interest.minSuffixComponents, interest.maxSuffixComponents)
 
+        # ChildSelector
+        # FIXME: can be applied for the immediate next component following
+        # the given prefix only? or until find a co?
+        # FIXME: need to comply with other selectors? e.g. leftmost child is
+        # a co (interest asks for leftmost child), but the interest also asks
+        # for min_suffix_components = 1
+
+        # Exclude
+        # FIXME: applies only to the continuing comp?
+        # no Any: exclude the comp list
+        # leading Any: Any comp0: exclude comp <= comp0
+        # trailing Any: comp1 Any: exclude comp >= comp1
+        # in between Any: comp0 Any comp1: eclude comp1 <= comp <= comp0
+
+        # MustBeFresh
+        # FIXME: how to handle the FreshnessPeriod in REPO?
+
+        # PublisherPublicKeyLocator
+        # compares KeyLocator in interest against that in co
 
         try:
             # by design, there is AT MOST one C2S relation for each node

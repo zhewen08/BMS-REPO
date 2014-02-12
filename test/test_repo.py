@@ -19,13 +19,17 @@
 
 # REPO prototype on Neo4J unit tests
 
-from lib.repo import Repo
+import os
+import sys
+sys.path.append(os.path.abspath('../..'))
+
+from REPO.lib.repo import Repo
 from pyndn import Name, Interest
 
 class TestRepo(object):
 
-    def __init__(self):
-        self.repo = Repo(clear=True)
+    def __init__(self, clear=False):
+        self.repo = Repo(clear=clear)
 
     def test_add_to_repo(self):
         names = [
@@ -68,8 +72,6 @@ class TestRepo(object):
         values = [
                 "melnitz.1451.seg0",
                 "metlnitz.1451.seg1",
-                "melnitz.1453.seg0",
-                "strathmore.1221.seg0",
                 ]
         for name, expected in zip(names, values):
             try:
@@ -83,7 +85,7 @@ class TestRepo(object):
                     if co.content != expected:
                         print "test_extract_from_repo failed: wrong content"
                         return
-        print "test_add_to_repo succeeded"
+        print "test_extract_from_repo succeeded"
 
     def run_tests(self):
         self.test_add_to_repo()
