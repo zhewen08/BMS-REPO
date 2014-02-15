@@ -31,6 +31,7 @@ from repo_exceptions import AddToRepoException, NoRootException, \
 
 import os
 import pickle
+import base64
 
 LABEL_COMPONENT = "Component"
 LABEL_SEGMENT = "Segment"
@@ -226,21 +227,27 @@ class Repo(object):
         if wrapped:
             co = self.wrap_content(name, content)
             # data = _pyndn.dump_charbuf(co.ndn_data)
-            data = repr(co)
+            binary_data = _pyndn.dump_charbuf(co.ndn_data)
+            data = base64.b64encode(binary_data)
         else:
             data = content
-        # create a leaf node containing the path to the content object, 
-        # which itself will be stored in the filesystem as a file
-        # use md5 digest of name as file name
+#        # create a leaf node containing the path to the content object, 
+#        # which itself will be stored in the filesystem as a file
+#        # use md5 digest of name as file name
+#        try:
+#            data_ref = self.save_to_disk(name, data)
+#        except AddToRepoException as ex:
+#            print "Error: add_to_repo: %s" % str(ex)
+#        else:
+#            try:
+#                self.add_to_graphdb(name, data_ref, wrapped)
+#            except AddToRepoException as ex:
+#                print "Error: add_to_repo: %s" % str(ex)
         try:
-            data_ref = self.save_to_disk(name, data)
+            self.add_to_graphdb(name, data, wrapped)
         except AddToRepoException as ex:
             print "Error: add_to_repo: %s" % str(ex)
-        else:
-            try:
-                self.add_to_graphdb(name, data_ref, wrapped)
-            except AddToRepoException as ex:
-                print "Error: add_to_repo: %s" % str(ex)
+
 
     def read_from_disk(self, segment_node):
         """
@@ -253,7 +260,69 @@ class Repo(object):
             # return fd.read()
             return pickle.load(fd)
 
-    def apply_min_max_suffix_components(self, last_node, 
+    def apply_exclude(self, last_node, exclude):
+        """
+        @param last_node - the node to start search from
+        @param exlucde - exclude filter the interest contains
+        @returns all nodes that fullfil the selector
+        """
+        _id = last_node._id
+        query = 'START s=node(%s)\n' % _id + \
+                'MATCH (s)-[:%s]->(m)\n' % (RELATION_C2C) + \
+                'RETURN (m)'
+        records = neo4j.CypherQuery(self.db_handler, query).execute()
+        _nodes = [record.values[0] for record in records.data]
+
+        if not exclude:
+            return _nodes
+
+        leading_any = exclude[1] if exclude[0] == 'Any' else None
+        trailing_any = exclude[-2] if exclude[-1] == 'Any' else None
+        for i in range(1, len(exclude) - 1):
+            if exclude[i] == 'Any':
+                inbetween_any.append(exclude[i-1], exclude[i+1])
+
+        def should_exclude(node, exclude=exclude, leading=leading_any, 
+                trailing=trailing_any, inbetween=inbetween_any):
+            comp = Name(node.get_properties()[PROPERTY_COMPONENT])
+            # assert @exclude is a list of Name objects
+            if comp in exclude:
+                return True
+            if leading and comp <= leading:
+                return True
+            if trailing and  comp >= trailing:
+                return True
+            for pair in inbetween:
+                if comp >= pair[0] and comp <= pair[1]:
+                    return True
+            return False
+
+        nodes = []
+        for node in _nodes:
+            if not should_exclude(node):
+                nodes.append(node)
+
+        return nodes
+
+    def apply_child_selector(self, nodes, child_selector):
+        """
+        @param nodes - nodes to be selected from. should all come from the
+        same level of components (e.g. what fullfil the exclude selector)
+        @param child_selector - child selector from the interest
+        @return one node
+        """
+        if not nodes:
+            return None
+        if len(nodes) == 1:
+            return nodes[0]
+        if not child_selector:
+            return nodes
+        nodes_sorted = sorted(nodes, 
+                key=lambda x:Name('/' + \
+                str(x.get_properties()[PROPERTY_COMPONENT])))
+        return [nodes_sorted[0]] if child_selector == 0 else [nodes_sorted[-1]]
+
+    def apply_min_max_suffix_components(self, nodes, 
             min_suffix_components, max_suffix_components):
         """
         @param last_node - node from which to apply min suffix components
@@ -267,10 +336,14 @@ class Repo(object):
             # virtually infinite
             max_suffix_components = MAX_SUFFIX_COMPS
 
-        _id = last_node._id
-        query = 'START s=node(%s)\n' % _id + \
+        _ids = []
+        for node in nodes:
+            _ids.append(str(node._id))
+        ids = ','.join(_ids)
+        query = 'START s=node(%s)\n' % ids + \
                 'MATCH (s)-[:%s*%d..%d]->(m)\n' % (RELATION_C2C, 
                         min_suffix_components, max_suffix_components) + \
+                'WHERE has(m.%s)' % PROPERTY_COMPONENT + \
                 'RETURN (m)'
         records = neo4j.CypherQuery(self.db_handler, query).execute()
         nodes = [record.values[0] for record in records.data]
@@ -300,9 +373,13 @@ class Repo(object):
         last_node = records.data[0].values[0]
 
         # TODO: apply selectors here. AT MOST one node shall be left 
-        # MinSuffixComponents
-        nodes = self.apply_min_max_suffix_components(last_node, 
-                interest.minSuffixComponents, interest.maxSuffixComponents)
+        # Exclude
+        # FIXME: assume interest.exclude is a list of components
+        # FIXME: need to test
+        nodes_exclude = self.apply_exclude(last_node, interest.exclude)
+        if not nodes_exclude:
+            # no match found
+            return None
 
         # ChildSelector
         # FIXME: can be applied for the immediate next component following
@@ -310,30 +387,45 @@ class Repo(object):
         # FIXME: need to comply with other selectors? e.g. leftmost child is
         # a co (interest asks for leftmost child), but the interest also asks
         # for min_suffix_components = 1
+        nodes_child = self.apply_child_selector(nodes_exclude, 
+                interest.childSelector)
+        if not nodes_child:
+            # no match found
+            return None
 
-        # Exclude
-        # FIXME: applies only to the continuing comp?
-        # no Any: exclude the comp list
-        # leading Any: Any comp0: exclude comp <= comp0
-        # trailing Any: comp1 Any: exclude comp >= comp1
-        # in between Any: comp0 Any comp1: eclude comp1 <= comp <= comp0
+        # MinSuffixComponents
+        nodes_suffix = self.apply_min_max_suffix_components(nodes_child, 
+                interest.minSuffixComponents, interest.maxSuffixComponents)
+        if not nodes_suffix:
+            # no match found
+            return None
 
-        # MustBeFresh
-        # FIXME: how to handle the FreshnessPeriod in REPO?
+        # MustBeFresh - test against a co
+        # ignored in REPO
 
-        # PublisherPublicKeyLocator
+        # PublisherPublicKeyLocator - test against a co
         # compares KeyLocator in interest against that in co
+        # FIXME: need PyNDN2
+        # TODO: select from nodes_suffix
+
+        # TODO: need a default way to select if cannot decide with the selectors
+
+        nodes_suffix.sort(
+                key=lambda x:Name('/' + \
+                str(x.get_properties()[PROPERTY_COMPONENT])))
+        final_node = nodes_suffix[0]
 
         try:
             # by design, there is AT MOST one C2S relation for each node
-            rel = last_node.match(RELATION_C2S).next()
+            rel = final_node.match(RELATION_C2S).next()
             # we found a content object under the exact given name
             segment_node = rel.end_node
             wrapped = eval(segment_node.get_properties()[PROPERTY_WRAPPED])
-            data = self.read_from_disk(segment_node)
+#            data = self.read_from_disk(segment_node)
+            data = segment_node.get_properties()[PROPERTY_DATA]
             if wrapped and not wired:
                 # decode wired co to ContentObject instance
-                co = eval(data)
+                co = base64.b64decode(data)
                 return co
             else:
                 # return either wired format co or raw data
