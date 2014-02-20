@@ -1,0 +1,144 @@
+\documentclass{sig-alternate-10pt}
+
+
+\makeatletter
+\let\@copyrightspace\relax
+\makeatother
+
+%\usepackage{caption}
+\usepackage{floatrow}
+% Table float box with bottom caption, box width adjusted to content
+%\newfloatcommand{capbtabbox}{table}[][\FBwidth]
+\usepackage{blindtext}
+
+%\usepackage{sectsty}
+\usepackage{graphicx}
+%\usepackage{times}
+\usepackage{epsfig}
+\usepackage{epstopdf}
+\usepackage{subfigure}
+\usepackage{url}
+\usepackage{cite}%
+\usepackage{color}
+\usepackage{balance}
+\usepackage{multirow}
+\usepackage[normalem]{ulem}
+\usepackage{fmtcount}
+
+\usepackage{times}
+\usepackage{cite}
+\usepackage{amsfonts,amssymb,amsmath}
+\usepackage{balance}
+%\usepackage{verbatim}
+%\usepackage{ulem} \normalem
+\usepackage{algorithm}
+\usepackage{algorithmic,eqparbox,array}
+\renewcommand\algorithmiccomment[1]{%
+    \hfill\///\ \eqparbox{COMMENT}{#1}%
+}
+\newcommand\LONGCOMMENT[1]{%
+    \hfill\///\ \begin{minipage}[t]{\eqboxwidth{COMMENT}}#1\strut\end{minipage}%
+}
+
+
+%\usepackage{algpseudocode}
+%\usepackage{rawfonts}
+%\include{amsthm.sty}
+% Define new commands
+%\usepackage{amsthm}
+%\usepackage{fmtcount}
+%\usepackage{threeparttable}
+
+\newenvironment{noindlist}
+ {\begin{list}{*}
+ {\leftmargin=0.35em \itemindent=0em \labelwidth = 0em \labelsep = 0.1em \itemsep = 0em \parsep = 0em \topsep = 0em \listparindent = 0.5in}}
+ {\end{list}}
+
+\newenvironment{noinditemize}{
+\begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\parskip}{-3pt}
+  \setlength{\parsep}{-3pt}
+}{\end{itemize}}
+
+
+
+
+\newtheorem{definition}{Definition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}[lemma]{Theorem}
+\renewcommand{\paragraph}[1]{\textbf{#1: }}
+%\newif\ifdebugdoc\debugdocfalse
+\newif\ifdebugdoc\debugdoctrue
+
+
+\ifdebugdoc
+%% Writing Mode
+\newcommand{\fhl}[1]{\uwave{#1}}
+\newcommand{\fyi}[1]{\footnote{\textcolor{blue}{fyi:#1}}}
+\newcommand{\remind}[1]{\footnote{\textit{[\uwave{Remind:} #1]}}}
+\newcommand{\repl}[2]{\textcolor{red}{#1}\textcolor{blue}{\sout{#2}}}
+\newcommand{\add}[1]{\textcolor{red}{#1}}
+\newcommand{\del}[1]{\textcolor{blue}{\sout{#1}}}
+\newcommand{\outline}[1]{\textbf{\colorbox{yellow}{Outline:}\textcolor{red}{#1.}}}
+\newcommand{\old}[1]{\large{\colorbox{blue}{Former: #1. }}}
+
+\else
+%%Submission Mode
+\newcommand{\fhl}[1]{#1}
+\newcommand{\fyi}[1]{}
+\newcommand{\remind}[1]{#1}
+\newcommand{\repl}[2]{#1}
+\newcommand{\add}[1]{#1}
+\newcommand{\del}[1]{}
+\newcommand{\chunyi}[1]{}
+\newcommand{\outline}[1]{}
+\fi
+
+
+\begin{document}
+\title{NDNREPO: Transparent Permanent Storage for NDN-Ready Content Objects}
+
+
+
+\author{Zhe Wen\\
+UCLA Computer Science, Los Angeles, CA 90095}
+
+\maketitle
+
+\begin{sloppypar}
+
+
+
+% edit version
+
+%\input{abstract}
+\input{intro}
+%\input{design}
+%\input{implementation}
+%\input{evaluation}
+%\input{discuss}
+%\input{related}
+%\input{conclusion}
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% References %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\small
+\balance
+\bibliographystyle{abbrv}
+%\bibliographystyle{unsrt} %Entries are not ordered alphabetically, but in the order they are first referenced.
+\bibliography{reference-list}
+%\bibliography{../bib/diversity,../bib/energy-all, ../bib/diversity }
+
+%\input{appendix.tex}
+
+
+\end{sloppypar}
+\end{document}

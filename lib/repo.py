@@ -215,6 +215,24 @@ class Repo(object):
             raise AddToRepoException(str(ex))
         results = neo4j.CypherQuery(self.db_handler, query).execute()
 
+    # TODO: simpler version of add_to_repo
+    # insert a content object to repo under given name
+    def add_content_object_to_repo(self, name, co):
+        """
+        @param name - name of the content object
+        @param co - wire format content object to be inserted
+        encodes the given wire format content object and add it to the graph
+        database
+        """
+        name = str(Name(name))
+        data = base64.b64encode(co)
+        try:
+            self.add_to_graphdb(name, data, wrapped=True)
+        except AddToRepoException as ex:
+            print "Error: add_content_object_to_repo: %s" % str(ex)
+
+
+
     def add_to_repo(self, name, content, wrapped=True):
         """
         @param name - name of the content object
@@ -309,7 +327,8 @@ class Repo(object):
         @param nodes - nodes to be selected from. should all come from the
         same level of components (e.g. what fullfil the exclude selector)
         @param child_selector - child selector from the interest
-        @return one node
+        @return one node if this selector exists and all nodes provided if
+        this selector does not exist
         """
         if not nodes:
             return None
@@ -350,14 +369,12 @@ class Repo(object):
 
         return nodes
 
-    def extract_from_repo(self, interest, wired=False):
+    def locate_last_node(self, name):
         """
-        @param interest - the interest requesting a content object
-        @param wired - whether to return the wired format co
-        @return the requested content object in wired format. if does not 
-        exist return None
+        @param interest - the interest that contains the name prefix
+        @return the node found according to the prefix
         """
-        name = str(interest.name)
+        name = str(name)
         path = self.name_to_path(name)
         # create a cypher query to match the path
         try:
@@ -372,7 +389,14 @@ class Repo(object):
         assert(len(records.data[0].values) == 1)
         last_node = records.data[0].values[0]
 
-        # TODO: apply selectors here. AT MOST one node shall be left 
+        return last_node
+
+    def apply_selectors(self, last_node, interest):
+        """
+        @param last_node - starting node to apply the selectors
+        @param interest - interest that contains the selectors
+        @return all nodes that fulfill the selectors
+        """
         # Exclude
         # FIXME: assume interest.exclude is a list of components
         # FIXME: need to test
@@ -413,7 +437,22 @@ class Repo(object):
         nodes_suffix.sort(
                 key=lambda x:Name('/' + \
                 str(x.get_properties()[PROPERTY_COMPONENT])))
-        final_node = nodes_suffix[0]
+
+        return nodes_suffix
+
+    def extract_from_repo(self, interest, wired=False):
+        """
+        @param interest - the interest requesting a content object
+        @param wired - whether to return the wired format co
+        @return the requested content object in wired format. if does not 
+        exist return None
+        """
+        # find last node according to given name prefix
+        last_node = self.locate_last_node(interest.name)
+
+        # apply selectors here. AT MOST one node shall be left 
+        nodes = self.apply_selectors(last_node, interest)
+        final_node = nodes[0]
 
         try:
             # by design, there is AT MOST one C2S relation for each node
@@ -432,3 +471,47 @@ class Repo(object):
                 return data
         except StopIteration as ex:
             pass
+
+    @staticmethod
+    def parse_co_name(cmd_interest_name):
+        """
+        @param cmd_interest_name - name contained in the command interest
+        @return Name() instance of the co's name
+        parses the command interest name for the name prefix of the co
+        """
+        _name = str(cmd_interest_name)
+        assert('delete' in _name)
+        try:
+            _co_name = _name.split('delete')[2]
+        except Exception as ex:
+            print 'parse_co_name: %s' % str(ex)
+        assert(_co_name)
+        co_name = Name(_co_name)
+        return co_name
+
+    def delete_from_repo(self, interest)
+        """
+        @param interest - command interest that requests deletion
+        deletes content objects either by precise name, or by prefix plus
+        selectors
+        """
+        # TODO: test this function
+        co_name = self.parse_co_name(interest.name)
+
+        # by name prefix
+        # by interest
+        # find last node according to given name prefix
+        last_node = self.locate_last_node(co_name)
+
+        # apply selectors here. AT MOST one node shall be left 
+        nodes = self.apply_selectors(last_node, interest)
+
+        if nodes:
+            _ids = []
+            for node in nodes:
+                _ids.append(str(node._id))
+            ids = ','.join(_ids)
+            query = 'START s=node(%s)\n' % ids + \
+                    'MATCH (s)-[r]->()\n' + \
+                    'DELETE s, r'
+            records = neo4j.CypherQuery(self.db_handler, query).execute()

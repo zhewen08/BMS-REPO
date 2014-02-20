@@ -1,0 +1,82 @@
+\section{Implementation}
+
+\begin{figure}
+\includegraphics[width=0.4\textwidth]{wheelMagnets.jpg}
+\caption{Placement of Magnets and Reed Switch on one of the Wheels}
+\label{wMags}
+\end{figure}
+
+Our implementation of the wheelchair localization system consists of both a hardware part and software part. To keep track of the ticks for calulating the distance a wheel has travelled, we placed a magnet on each of the eight spokes of each wheel, and ran two reed switches down each side of the wheel chair to detect as the magnets pass by it (see Figure~\ref{wMags}). The reed switches are then connected to a bluetooth mouse on the wheelchair where the left reed switch is connected to the left click and the right one to the right click. In this way, we record the rotation for each wheel based on the left and right clicks of the mouse.
+
+We differentiate between straight forward movement and turns by comparing the number of left clicks $LC$ with the number of right clicks $RC$. If they are equal, we infer that the wheelchair is moving forward and can thus use equation~\ref{straight} to calculate the new position of the wheelchair. On the other hand, we can infer a simple turn if the click count for either left or right was $0$. In this case, the wheelchair is turning toward the direction of the $0$ click. For example, if $LC = 0$, while $RC = 2$, we can infer that the wheelchair has turned left. Once we make the inference on the direction of turn, we can use formula~\ref{thetaEqn} to calculate the magnitude of the turn.
+
+\begin{table}[H]
+\begin{tabular}{ c | c | c | c }
+  \hline
+  \# Left Clicks & \# Right Clicks & State & Distance \\
+  \hline
+  1 & 1 & F & 1 \\
+  1 & 1 & F & 1\\
+  \textbf{0} & \textbf{1} & \textbf{L} & \textbf{0}\\
+  \textbf{1} & \textbf{0} & \textbf{R} & \textbf{0}\\
+  1 & 1 & F & 1\\
+  \hline
+\end{tabular}
+\caption{Inaccurate Inferences Caused by Unsynchronized Wheel Movements}
+\label{unsynch}
+\end{table}
+
+Unfortunately, this simple design does not work as intended and is actually a great challenge for us. When the wheels rotate, in most cases they do not rotate in a synchronized fashion. Therefore, it is impossible for the left and right clicks to always happen at the same time when the wheelchair moves straight forward. Table~\ref{unsynch} gives a good example of this. In the table, the \emph{State} column indicates the nature of the movement. \emph{F} means a forward movment; \emph{L} means a left turn; \emph{R} means a right turn. This table displays a series of normal forward movements followed by an unsynchronized movement of the wheel rotations, which are incorrectly inferred to be a slight left turn followed by a slight right. As a result, although the total distance travelled by the wheelchair should be $1 + 1 + 1 + 1 = 4$ units, we infer only $3$ units because we miss the $1$ unit distance travelled from the unsynchronized move. When this happens many times, our movement accuracy will sharply decrease. In addition to this, because of imperfections in the wheelchair design, sometimes one wheel will slip and we would permanently miss a click. This does not happen often, but if it occurs in a high aggregate scenario, as indicated in Table~\ref{slip}, it can cause large underestimates in movement distances. Here, the actual distance travelled by the wheelchair is $2+3+3+2 = 10$ units, but because of the $0$ unit distance inferred by the unequal number of left and right clicks, we get a total distance of only $7$ units.
+
+\begin{table}
+\caption{Inaccurate Inferences Caused by Wheel Slipping}
+\begin{tabular}{ c | c | c | c }
+  \hline
+  \# Left Clicks & \# Right Clicks & State & Distance \\
+  \hline
+  2 & 2 & F & 2 \\
+  3 & 3 & F & 3\\
+  \textbf{3} & \textbf{2} & \textbf{R} & \textbf{0}\\
+  2 & 2 & F & 2\\
+  \hline
+\end{tabular}
+\label{slip}
+\end{table}
+
+We solve this problem by implementing a kind of "approximate equality" and use it instead of the normal equality to infer a straight forward movement by the wheelchair. Under our new system, we define two numbers as being equal if their difference is below a threshold value. We use this new equality system to compare $LC$ with $RC$, and take the greater of the two as the movement magnitude. However, to make sure that we are not ignoring what may be the beginning of an actual turn, we designate such unequal but close wheel rotations as a "forward left" or "forward right" movement and use the next move to check the correctness of our decision. On the next move, if the inequality was towards the other direction or if the difference between the $LC$ and $RC$ was $0$, then we assume that we have guessed correctly in the previous move.
+
+Here we must handle each success case separately. As an example, during a straight forward movement, if the $(LC, RC)$ pair was $(x, x-1)$ in the  previous move, then we guess that this inequality was due to either unsynchronized rotation of the wheels or to slippage in the wheels, and read it as if the pair was $(x, x)$ as according to our rules. On the next move, we may see the $(LC, RC)$ pair as either something like $(y, y)$ or $(y-1, y)$. The $(y, y)$ case is easier to handle because we can just record a movement forward of $y$ units as usual. To handle the $(y, y+1)$ case, however, we must check the previous move to know whether or not the wheelchair is actually moving forward. We can assume this if the direction of inequality is opposite from the previous one. In this case, we can take the new click pair as if it were $(y, y)$ to balance out the extra distance given from the previous movement inference. Therefore, we develop the rule of thumb, where we always take the \emph{bigger} of the first L-R inequality and the \emph{smaller} of the one after it.
+
+However, if the inequality was toward the same direction, then we "undo" all the movement inferred in the previous move, and aggregate what was supposed to be the previous turning degree with the next one to correct the movement inference. An example of this is seen in Table~\ref{correction}, where the second (1,0) click pair corrected the previous incorrect inference of forward movement by moving $-1$ units and turning $1+2=3$ units to the right. Thus, we must save all the inferred movements of wheelchair in a database and whenever we get an unequal number of clicks, we always check the previous entry to infer the next movement as well as to see if any corrections need to be made. In this way, we implement our "approximate equality" to have a more accurate reading of the wheelchair's movements.
+
+\begin{table}
+\caption{Correcting a Wrong Inference}
+\begin{tabular}{ c | c | c | c | c}
+  \hline
+  \# Left Clicks & \# Right Clicks & State & Distance & Turn \\
+  \hline
+  2 & 2 & F & 2 & 0\\
+  1 & 0 & F/R & 1 & 0\\
+  \textbf{2} & \textbf{0} & \textbf{R} & \textbf{-1} & \textbf{3}\\
+  2 & 2 & F & 2 & 0\\
+  \hline
+\end{tabular}
+\label{correction}
+\end{table}
+
+We implemented our software using LAMP server with J-Queries... \textbf{SILAS, PLEASE FINISH THIS PART WITH THE SERVER SETUP AND THE GOOGLE EARTH}
+
+\begin{itemize}
+\item
+What are the software/hardware platforms for the implementation?
+\item
+Complexity of the implementation?
+\begin{itemize}
+\item
+e.g., lines of code
+\item
+Does it work with other existing software/hardware platforms?
+\item
+If not, is it easy to export it to these platforms?
+\end{itemize}
+\end{itemize} 

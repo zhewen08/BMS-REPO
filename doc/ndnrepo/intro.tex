@@ -1,0 +1,28 @@
+\section{Introduction}
+
+Content object repository (REPO) is a very important application that facilitates NDN wire-format data storage and fetching. On the one hand, the REPO listens to interests under certain set of NDN prefixes, and replies the requested content object if available; on the other hand, the REPO accepts command interests signed by certified requesters and performs insertion/deletion operations as requested.
+
+The previous REPO implementation, i.e. ccnr, leveraged its low level storage on raw file system and lacked support for access control and deletion. Its successor migrated to SQLite database and enabled deletion operation. In both versions, however, processing and matching the interest prefix and selectors to search for content object had been the major, if not the only, headache that compromised the simplicity and elegance of REPO design and implementation.
+
+Compared with both ccnr and its SQLite based successor, our new REPO prototype exploits graph database which provides intuitive and natural support for NDN hierarchical naming search and data storage. Specifically, we base our implementation on Neo4J, a popular graph database that comes with its own graph storage model (in contrast to either the relational model or the key-value pair model) and query language (Cypher) that features graph pattern (node, relation, path, etc) search that natively fits into the NDN naming philosophy.
+
+The only possible drawback of the prototype is that we used the TCP based RESTful Neo4J API set for Python, which might become the bottleneck of query performance. However, it is still good enough to reveal the pros and cons of exploiting a graph database for NDN REPO and can be later improved via migrating to another Neo4J driver that accesses the low level storage directly.
+
+Our prototype is constituted by:
+\begin{itemize}
+    \item REPO driver. Library that provides API set for insertion/deletion/extraction operations on the REPO.
+    \begin{itemize}
+        \item insertion. wraps given content as an object and insert it into REPO under specified name; insert given content object into REPO under specified name.
+        \item deletion.\footnote{to be decided}
+        \item extraction. searches REPO for content object as requested by the interest (prefix + selectors).
+    \end{itemize}
+    \item REPO server. listens to incoming interests under specified prefixes and replies the requested content object if available.
+\end{itemize}
+
+For the first prototype release, our REPO prototype is supposed to provide the following functionality:
+\begin{itemize}
+    \item REPO API set. support for REPO insertion/deletion/extraction operations via REPO driver API set.
+    \item data extraction. listens to and replies interests of content object fetching.\footnote{command interests not supported yet}
+    \item data insertion. data insertion protocol \footnote{not available now}
+    \item data deletion. data deletion protocol \footnote{not available now}
+\end{itemize}
