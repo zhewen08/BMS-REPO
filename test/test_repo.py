@@ -31,6 +31,7 @@ class TestRepo(object):
 
     def __init__(self, clear=False):
         self.repo = Repo(clear=clear)
+        self.repo.print_tree()
 
     def test_add_to_repo(self):
         names = [
@@ -67,14 +68,17 @@ class TestRepo(object):
 #                "strathmore.1221.seg0",
 #                ]
         names = [
-                "/ndn/ucla.edu/bms/building:melnitz",
+#                "/ndn/ucla.edu/bms/building:melnitz",
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451",
+                "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg0",
                 ]
         values = [
                 "melnitz.1451.seg0",
                 "metlnitz.1451.seg1",
                 ]
         for name, expected in zip(names, values):
+            interest = Interest(Name(name))
+            co = self.repo.extract_from_repo(interest)
             try:
                 interest = Interest(Name(name))
                 co = self.repo.extract_from_repo(interest)
@@ -82,6 +86,7 @@ class TestRepo(object):
                 print "test_extract_from_repo failed: %s" % str(ex)
                 return
             else:
+                pass
 #                if co.content != expected:
 #                    print "test_extract_from_repo failed: wrong content"
 #                    return
@@ -92,5 +97,6 @@ class TestRepo(object):
         self.test_extract_from_repo()
 
 if __name__ == '__main__':
-    tests = TestRepo()
+ #   tests = TestRepo(clear=True)
+    tests = TestRepo(clear=False)
     tests.run_tests()

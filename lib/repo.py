@@ -76,6 +76,29 @@ class Repo(object):
         except NoRootException as ex:
             print "Error: __init__: %s" % str(ex)
 
+    def print_tree(self, root=None, level=0):
+        """
+        prints the repo content in tree style
+        """
+        if not root:
+            root = self.root
+
+        for lv in range(level):
+            print '  ',
+        try:
+            print root.get_properties()[PROPERTY_COMPONENT]
+        except Exception as ex:
+            print 'data: %s' % repr(root.get_properties())
+
+        query = 'START s=node(%s)\n' % root._id +\
+                'MATCH (s)-[r]->(c)\n' + \
+                'RETURN c'
+        records = neo4j.CypherQuery(self.db_handler, query).execute()
+
+        nodes = [record.values[0] for record in records.data]
+        for node in nodes:
+            self.print_tree(node, level + 1)
+
     def check_or_create_root(self):
         """
         checks or creates the root node in graph database, which is
@@ -132,7 +155,7 @@ class Repo(object):
 
         return file_name
 
-    def name_to_path(self, name, data=None, wrapped=True):
+    def name_to_path(self, name, wrapped=True):
         """
         @param name - string representation of a ndn name
         @param data - data to be stored in node
@@ -161,14 +184,6 @@ class Repo(object):
             path.append(node)
             i += 1
 
-        if data:
-            # any node is supposed to have AT MOST one RELATION_C2S
-            rel = 'r%d:%s' % (i, RELATION_C2S)
-            node = 'n%d:%s {%s:"%s", %s:"%s"}' % (i, LABEL_SEGMENT, 
-                    PROPERTY_DATA, data, PROPERTY_WRAPPED, wrapped)
-            path.append(rel)
-            path.append(node)
-
         return path
 
     @staticmethod
@@ -187,7 +202,7 @@ class Repo(object):
                 query = 'START r=node:root(root_name = "ndn")\n' +\
                         '%s (r)' % action.upper()
             else:
-                query = 'START s=node({%s})\n' % start + \
+                query = 'START s=node(%s)\n' % start + \
                         '%s (s)' % action.upper()
         else:
             raise UnsupportedQueryException("unsupported query")
@@ -207,13 +222,35 @@ class Repo(object):
         @param data - data to store under name
         adds a record describing the name and its co (on disk) to graphdb
         """
-        path = self.name_to_path(name, data, wrapped)
+        path = self.name_to_path(name, wrapped=wrapped)
 
         try:
             query = self.create_path_query(path, 'CREATE UNIQUE')
         except UnsupportedQueryException as ex:
             raise AddToRepoException(str(ex))
-        results = neo4j.CypherQuery(self.db_handler, query).execute()
+        records = neo4j.CypherQuery(self.db_handler, query).execute()
+
+        leaf_node = records.data[0][0]
+        query = 'START s=node(%s)\n' % leaf_node._id + \
+                'MATCH (s)-[r:%s]->(c)\n' % RELATION_C2S + \
+                'RETURN c'
+        records = neo4j.CypherQuery(self.db_handler, query).execute()
+        if not records:
+            # create segment node for data
+            rel = 'r:%s' % RELATION_C2S
+            node = 'c:%s {%s:"%s", %s:"%s"}' % (LABEL_SEGMENT, 
+                    PROPERTY_DATA, data, PROPERTY_WRAPPED, wrapped)
+            query = 'START s=node(%s)\n' % leaf_node._id + \
+                    'CREATE (s)-[%s]->(%s)\n' % (rel, node) + \
+                    'RETURN c'
+            records = neo4j.CypherQuery(self.db_handler, query).execute()
+        else:
+            seg_node = records.data[0][0]
+            query = 'START s=node(%s)\n' % seg_node._id + \
+                    'MATCH (s)\n' + \
+                    'SET s.%s = "%s"\n' % (PROPERTY_DATA, data) + \
+                    'RETURN s'
+            records = neo4j.CypherQuery(self.db_handler, query).execute()
 
     # TODO: simpler version of add_to_repo
     # insert a content object to repo under given name
@@ -245,10 +282,10 @@ class Repo(object):
         if wrapped:
             co = self.wrap_content(name, content)
             # data = _pyndn.dump_charbuf(co.ndn_data)
-            binary_data = _pyndn.dump_charbuf(co.ndn_data)
-            data = base64.b64encode(binary_data)
+            _data = _pyndn.dump_charbuf(co.ndn_data)
         else:
-            data = content
+            _data = content
+        data = base64.b64encode(_data)
 #        # create a leaf node containing the path to the content object, 
 #        # which itself will be stored in the filesystem as a file
 #        # use md5 digest of name as file name
@@ -397,31 +434,25 @@ class Repo(object):
         @param interest - interest that contains the selectors
         @return all nodes that fulfill the selectors
         """
-        # Exclude
-        # FIXME: assume interest.exclude is a list of components
-        # FIXME: need to test
-        nodes_exclude = self.apply_exclude(last_node, interest.exclude)
-        if not nodes_exclude:
-            # no match found
-            return None
-
-        # ChildSelector
-        # FIXME: can be applied for the immediate next component following
-        # the given prefix only? or until find a co?
-        # FIXME: need to comply with other selectors? e.g. leftmost child is
-        # a co (interest asks for leftmost child), but the interest also asks
-        # for min_suffix_components = 1
-        nodes_child = self.apply_child_selector(nodes_exclude, 
-                interest.childSelector)
-        if not nodes_child:
-            # no match found
-            return None
+        if interest.exclude or interest.childSelector:
+            # Exclude
+            # FIXME: assume interest.exclude is a list of components
+            # FIXME: need to test
+            nodes = self.apply_exclude(last_node, interest.exclude)
+            # ChildSelector
+            # FIXME: can be applied for the immediate next component following
+            # the given prefix only? or until find a co?
+            # FIXME: need to comply with other selectors? e.g. leftmost child is
+            # a co (interest asks for leftmost child), but the interest also asks
+            # for min_suffix_components = 1
+            nodes = self.apply_child_selector(nodes, interest.childSelector)
+        else:
+            nodes = [last_node]
 
         # MinSuffixComponents
-        nodes_suffix = self.apply_min_max_suffix_components(nodes_child, 
+        nodes = self.apply_min_max_suffix_components(nodes, 
                 interest.minSuffixComponents, interest.maxSuffixComponents)
-        if not nodes_suffix:
-            # no match found
+        if not nodes:
             return None
 
         # MustBeFresh - test against a co
@@ -434,11 +465,11 @@ class Repo(object):
 
         # TODO: need a default way to select if cannot decide with the selectors
 
-        nodes_suffix.sort(
+        nodes.sort(
                 key=lambda x:Name('/' + \
                 str(x.get_properties()[PROPERTY_COMPONENT])))
 
-        return nodes_suffix
+        return nodes
 
     def extract_from_repo(self, interest, wired=False):
         """
@@ -452,6 +483,10 @@ class Repo(object):
 
         # apply selectors here. AT MOST one node shall be left 
         nodes = self.apply_selectors(last_node, interest)
+        if not nodes:
+            print 'Not matching co found'
+            return None
+
         final_node = nodes[0]
 
         try:
@@ -489,7 +524,7 @@ class Repo(object):
         co_name = Name(_co_name)
         return co_name
 
-    def delete_from_repo(self, interest)
+    def delete_from_repo(self, interest):
         """
         @param interest - command interest that requests deletion
         deletes content objects either by precise name, or by prefix plus
