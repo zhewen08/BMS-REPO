@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 # Copyright (c) 2014 University of California, Los Angeles
 #
 # This program is free software; you can redistribute it and/or modify
@@ -19,21 +17,18 @@
 
 # REPO prototype on Neo4J unit tests
 
-import os
-import sys
-sys.path.append(os.path.abspath('..'))
-
-
-from lib.repo import Repo
-from pyndn import Name, Interest
+from repo import Repo
+from pyndn import Name
+from pyndn import Interest
+from pyndn import Data
 
 class TestRepo(object):
 
     def __init__(self, clear=False):
         self.repo = Repo(clear=clear)
-        self.repo.print_tree()
+#        self.repo.print_tree()
 
-    def test_add_to_repo(self):
+    def test_add_content_object_to_repo(self):
         names = [
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg0",
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1",
@@ -47,11 +42,12 @@ class TestRepo(object):
                 "strathmore.1221.seg0",
                 ]
         for name, value in zip(names, values):
-            try:
-                self.repo.add_to_repo(name, value)
-            except Exception as ex:
-                print "test_add_to_repo failed: %s" % str(ex)
-                return
+            co = Data(name)
+            co.setContent(value)
+            data = co.wireEncode().toBuffer()
+            print 'co inserted: ', data
+            self.repo.add_content_object_to_repo(name, value)
+        self.repo.print_tree()
         print "test_add_to_repo succeeded"
 
     def test_extract_from_repo(self):
@@ -68,35 +64,27 @@ class TestRepo(object):
 #                "strathmore.1221.seg0",
 #                ]
         names = [
-#                "/ndn/ucla.edu/bms/building:melnitz",
+                "/ndn/ucla.edu/bms/building:melnitz",
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451",
-                "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg0",
+                "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1",
                 ]
         values = [
                 "melnitz.1451.seg0",
+                "metlnitz.1451.seg0",
                 "metlnitz.1451.seg1",
                 ]
         for name, expected in zip(names, values):
             interest = Interest(Name(name))
-            co = self.repo.extract_from_repo(interest)
-            try:
-                interest = Interest(Name(name))
-                co = self.repo.extract_from_repo(interest)
-            except Exception as ex:
-                print "test_extract_from_repo failed: %s" % str(ex)
-                return
-            else:
-                pass
-#                if co.content != expected:
-#                    print "test_extract_from_repo failed: wrong content"
-#                    return
+            data = self.repo.extract_from_repo(interest)
+            print 'co extracted: ', data
         print "test_extract_from_repo succeeded"
 
     def run_tests(self):
-        self.test_add_to_repo()
+        self.test_add_content_object_to_repo()
         self.test_extract_from_repo()
 
 if __name__ == '__main__':
- #   tests = TestRepo(clear=True)
+    tests = TestRepo(clear=True)
+    tests.run_tests()
     tests = TestRepo(clear=False)
     tests.run_tests()

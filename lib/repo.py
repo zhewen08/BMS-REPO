@@ -21,11 +21,21 @@
 from py2neo import neo4j, cypher
 from hashlib import md5
 
-from pyndn import NDN, Name, Interest, ContentObject, SignedInfo, Key, \
-        KeyLocator
-from pyndn import _pyndn
-import pyndn
+from pyndn import Name
+from pyndn import Data
+from pyndn import ContentType
+from pyndn import KeyLocatorType
+from pyndn import Sha256WithRsaSignature
+from pyndn.security import KeyType
+from pyndn.security import KeyChain
+from pyndn.security.identity import IdentityManager
+from pyndn.security.identity import MemoryIdentityStorage
+from pyndn.security.identity import MemoryPrivateKeyStorage
+from pyndn.util import Blob
+from pyndn.util import SignedBlob
 
+from default_key import DEFAULT_PUBLIC_KEY_DER
+from default_key import DEFAULT_PRIVATE_KEY_DER
 from repo_exceptions import AddToRepoException, NoRootException, \
         UnsupportedQueryException
 
@@ -37,7 +47,8 @@ LABEL_COMPONENT = "Component"
 LABEL_SEGMENT = "Segment"
 
 PROPERTY_COMPONENT = "component"
-PROPERTY_DATA = "file"
+PROPERTY_DATA = "data"
+PROPERTY_LEAF = "leaf"
 PROPERTY_WRAPPED = "wrapped"
 
 RELATION_C2C = "CONTAINS_COMPONENT"
@@ -46,16 +57,10 @@ RELATION_C2S = "CONTAINS_SEGMENT"
 MIN_SUFFIX_COMPS = 0
 MAX_SUFFIX_COMPS = 63
 
+
 class Repo(object):
     # default object path
     _PATH = "/var/NDN/REPO"
-    # default key
-    _key = Key()
-    # FIXME: will report _pyndn.NDNError: Failed to initialize keystore (-1)
-    # when calling NDN().getDefaultKey()
-    # _key = NDN().getDefaultKey()
-    _key.generateRSA(1024)
-    # _key_locator = KeyLocator(_key)
 
     def __init__(self, server=None, port=None, db=None, clear=False):
         if not server:
@@ -86,7 +91,7 @@ class Repo(object):
         for lv in range(level):
             print '  ',
         try:
-            print root.get_properties()[PROPERTY_COMPONENT]
+            print root.get_properties()
         except Exception as ex:
             print 'data: %s' % repr(root.get_properties())
 
@@ -119,41 +124,29 @@ class Repo(object):
         @return the content object created
         wraps the given name and content into a content object
         """
-        co = ContentObject()
-        co.name = Name(name)
-        co.content = content
+        co = Data(Name(name))
+        co.setContent(content)
+        co.getMetaInfo().setFreshnessPeriod(5000)
+        co.getMetaInfo().setFinalBlockID(Name("/%00%09")[0])
 
-        if not key:
-            key = self._key
-            # key_locator = self._key_locator
+        identityStorage = MemoryIdentityStorage()
+        privateKeyStorage = MemoryPrivateKeyStorage()
+        identityManager = IdentityManager(identityStorage, privateKeyStorage)
+        keyChain = KeyChain(identityManager, None)
 
-        si = SignedInfo()
-        si.publisherPublicKeyDigest = key.publicKeyID
-        si.type = pyndn.CONTENT_DATA
-        si.freshnessSeconds = -1
-        # si.keyLocator = key_locator
-        co.signedInfo = si
+        # Initialize the storage.
+        keyName = Name("/ndn/bms/DSK-default")
+        certificateName = keyName.getSubName(0, keyName.size() - 1).append(
+                "KEY").append(keyName[-1]).append("ID-CERT").append("0")
+        identityStorage.addKey(keyName, KeyType.RSA, Blob(DEFAULT_PUBLIC_KEY_DER))
+        privateKeyStorage.setKeyPairForKeyName(keyName, DEFAULT_PUBLIC_KEY_DER, 
+                DEFAULT_PRIVATE_KEY_DER)
 
-        co.sign(key)
+#        keyChain.sign(co, certificateName)
 
-        return co
+        _data = co.wireEncode()
 
-    def save_to_disk(self, name, data):
-        """
-        @param name - string representation of ndn name
-        @param data - data to be stored
-        @return the file name of data on disk
-        writes given data to disk under the md5 digest of its name
-        """
-        file_name = md5(name).hexdigest()
-        try:
-            with open(os.path.join(self._PATH, file_name), "wb") as fd:
-                # fd.write(data)
-                pickle.dump(data, fd)
-        except Exception as ex:
-            raise AddToRepoException(ex)
-
-        return file_name
+        return _data.toBuffer()
 
     def name_to_path(self, name, wrapped=True):
         """
@@ -239,81 +232,57 @@ class Repo(object):
             # create segment node for data
             rel = 'r:%s' % RELATION_C2S
             node = 'c:%s {%s:"%s", %s:"%s"}' % (LABEL_SEGMENT, 
-                    PROPERTY_DATA, data, PROPERTY_WRAPPED, wrapped)
+                    PROPERTY_DATA, data,
+                    PROPERTY_WRAPPED, wrapped)
             query = 'START s=node(%s)\n' % leaf_node._id + \
                     'CREATE (s)-[%s]->(%s)\n' % (rel, node) + \
+                    'SET s.%s = "%s"\n' % (PROPERTY_LEAF, "True") + \
                     'RETURN c'
             records = neo4j.CypherQuery(self.db_handler, query).execute()
         else:
             seg_node = records.data[0][0]
-            query = 'START s=node(%s)\n' % seg_node._id + \
-                    'MATCH (s)\n' + \
-                    'SET s.%s = "%s"\n' % (PROPERTY_DATA, data) + \
-                    'RETURN s'
+            query = 'START c=node(%s)\n' % seg_node._id + \
+                    'MATCH (c)\n' + \
+                    'SET c.%s = "%s"\n' % (PROPERTY_DATA, data) + \
+                    'RETURN c'
             records = neo4j.CypherQuery(self.db_handler, query).execute()
 
     # TODO: simpler version of add_to_repo
     # insert a content object to repo under given name
-    def add_content_object_to_repo(self, name, co):
+    def add_content_object_to_repo(self, name, co, wired=True):
         """
         @param name - name of the content object
-        @param co - wire format content object to be inserted
-        encodes the given wire format content object and add it to the graph
-        database
+        @param co - content obejct to be inserted
+        @param wired - whether the co given is in wired format
+        inserts a given co to the repo
         """
-        name = str(Name(name))
-        data = base64.b64encode(co)
+        name = Name(name).toUri()
+        if not wired:
+            data = co.wireEncode()
+        else:
+            data = co
         try:
             self.add_to_graphdb(name, data, wrapped=True)
         except AddToRepoException as ex:
             print "Error: add_content_object_to_repo: %s" % str(ex)
 
-
-
-    def add_to_repo(self, name, content, wrapped=True):
-        """
-        @param name - name of the content object
-        @param content - the content to be wrapped and added
-        @param wrap - whether to wrap name+content into a co
-        (wraps the given content into a content object and) adds it
-        to the graph database under the specified name
-        """
-        name = str(Name(name))
-        if wrapped:
-            co = self.wrap_content(name, content)
-            # data = _pyndn.dump_charbuf(co.ndn_data)
-            _data = _pyndn.dump_charbuf(co.ndn_data)
-        else:
-            _data = content
-        data = base64.b64encode(_data)
-#        # create a leaf node containing the path to the content object, 
-#        # which itself will be stored in the filesystem as a file
-#        # use md5 digest of name as file name
+#    def add_to_repo(self, name, content, wrapped=True):
+#        """
+#        @param name - name of the content object
+#        @param content - the content to be wrapped and added
+#        @param wrap - whether to wrap name+content into a co
+#        (wraps the given content into a content object and) adds it
+#        to the graph database under the specified name
+#        """
+#        name = Name(name).toUri()
+#        if wrapped:
+#            data = self.wrap_content(name, content)
+#        else:
+#            data = content
 #        try:
-#            data_ref = self.save_to_disk(name, data)
+#            self.add_to_graphdb(name, data, wrapped)
 #        except AddToRepoException as ex:
 #            print "Error: add_to_repo: %s" % str(ex)
-#        else:
-#            try:
-#                self.add_to_graphdb(name, data_ref, wrapped)
-#            except AddToRepoException as ex:
-#                print "Error: add_to_repo: %s" % str(ex)
-        try:
-            self.add_to_graphdb(name, data, wrapped)
-        except AddToRepoException as ex:
-            print "Error: add_to_repo: %s" % str(ex)
-
-
-    def read_from_disk(self, segment_node):
-        """
-        @param segment_node - the node contains (a reference) to the segment
-        @return data the node contains (either from property or reference disk)
-        reads the segment (co or raw data) from node
-        """
-        file_name = segment_node.get_properties()[PROPERTY_DATA]
-        with open(os.path.join(self._PATH, file_name)) as fd:
-            # return fd.read()
-            return pickle.load(fd)
 
     def apply_exclude(self, last_node, exclude):
         """
@@ -397,9 +366,9 @@ class Repo(object):
             _ids.append(str(node._id))
         ids = ','.join(_ids)
         query = 'START s=node(%s)\n' % ids + \
-                'MATCH (s)-[:%s*%d..%d]->(m)\n' % (RELATION_C2C, 
-                        min_suffix_components, max_suffix_components) + \
-                'WHERE has(m.%s)' % PROPERTY_COMPONENT + \
+                'MATCH (s)-[:%s*%d..%d]->(m:%s {%s:"True"})\n' % (
+                RELATION_C2C, min_suffix_components, 
+                max_suffix_components, LABEL_COMPONENT, PROPERTY_LEAF) + \
                 'RETURN (m)'
         records = neo4j.CypherQuery(self.db_handler, query).execute()
         nodes = [record.values[0] for record in records.data]
@@ -411,7 +380,7 @@ class Repo(object):
         @param interest - the interest that contains the name prefix
         @return the node found according to the prefix
         """
-        name = str(name)
+        name = name.toUri()
         path = self.name_to_path(name)
         # create a cypher query to match the path
         try:
@@ -434,24 +403,27 @@ class Repo(object):
         @param interest - interest that contains the selectors
         @return all nodes that fulfill the selectors
         """
-        if interest.exclude or interest.childSelector:
+        exclude = interest.getExclude()
+        child_selector = interest.getChildSelector()
+        if exclude or child_selector:
             # Exclude
             # FIXME: assume interest.exclude is a list of components
             # FIXME: need to test
-            nodes = self.apply_exclude(last_node, interest.exclude)
+            nodes = self.apply_exclude(last_node, exclude)
             # ChildSelector
             # FIXME: can be applied for the immediate next component following
             # the given prefix only? or until find a co?
             # FIXME: need to comply with other selectors? e.g. leftmost child is
             # a co (interest asks for leftmost child), but the interest also asks
             # for min_suffix_components = 1
-            nodes = self.apply_child_selector(nodes, interest.childSelector)
+            nodes = self.apply_child_selector(nodes, child_selector)
         else:
             nodes = [last_node]
 
         # MinSuffixComponents
         nodes = self.apply_min_max_suffix_components(nodes, 
-                interest.minSuffixComponents, interest.maxSuffixComponents)
+                interest.getMinSuffixComponents(), 
+                interest.getMaxSuffixComponents())
         if not nodes:
             return None
 
@@ -471,7 +443,7 @@ class Repo(object):
 
         return nodes
 
-    def extract_from_repo(self, interest, wired=False):
+    def extract_from_repo(self, interest, wired=True):
         """
         @param interest - the interest requesting a content object
         @param wired - whether to return the wired format co
@@ -479,7 +451,7 @@ class Repo(object):
         exist return None
         """
         # find last node according to given name prefix
-        last_node = self.locate_last_node(interest.name)
+        last_node = self.locate_last_node(interest.getName())
 
         # apply selectors here. AT MOST one node shall be left 
         nodes = self.apply_selectors(last_node, interest)
@@ -495,15 +467,16 @@ class Repo(object):
             # we found a content object under the exact given name
             segment_node = rel.end_node
             wrapped = eval(segment_node.get_properties()[PROPERTY_WRAPPED])
-#            data = self.read_from_disk(segment_node)
-            data = segment_node.get_properties()[PROPERTY_DATA]
+            _data = segment_node.get_properties()[PROPERTY_DATA]
             if wrapped and not wired:
                 # decode wired co to ContentObject instance
-                co = base64.b64decode(data)
+                # FIXME: not sure if this is correct
+                co = Data()
+                co.wireDecode(SignedBlob(Blob(_data)))
                 return co
             else:
                 # return either wired format co or raw data
-                return data
+                return _data
         except StopIteration as ex:
             pass
 
@@ -531,7 +504,7 @@ class Repo(object):
         selectors
         """
         # TODO: test this function
-        co_name = self.parse_co_name(interest.name)
+        co_name = self.parse_co_name(interest.getName())
 
         # by name prefix
         # by interest
