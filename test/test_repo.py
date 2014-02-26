@@ -20,7 +20,56 @@
 from repo import Repo
 from pyndn import Name
 from pyndn import Interest
+from pyndn import Exclude
 from pyndn import Data
+from pyndn import ContentType
+from pyndn import KeyLocatorType
+from pyndn import Sha256WithRsaSignature
+
+def dump(*list):
+    result = ""
+    for element in list:
+        result += (element if type(element) is str else repr(element)) + " "
+    print(result)
+
+def dumpData(data):
+    dump("name:", data.getName().toUri())
+    if data.getContent().size() > 0:
+        # Use join to convert each byte to chr.
+        dump("content (raw):", "".join(map(chr, data.getContent().buf())))
+        dump("content (hex):", data.getContent().toHex())
+    else:
+        dump("content: <empty>")
+    if not data.getMetaInfo().getType() == ContentType.BLOB:
+        dump("metaInfo.type:",
+             "LINK" if data.getMetaInfo().getType() == ContentType.LINK
+             else "KEY" if data.getMetaInfo().getType() == ContentType.KEY
+             else "uknown")
+    dump("metaInfo.freshnessPeriod (milliseconds):",
+         data.getMetaInfo().getFreshnessPeriod()
+         if data.getMetaInfo().getFreshnessPeriod() >= 0 else "<none>")
+    dump("metaInfo.finalBlockID:",
+         data.getMetaInfo().getFinalBlockID().toEscapedString()
+         if data.getMetaInfo().getFinalBlockID().getValue().size() >= 0 
+         else "<none>")
+    signature = data.getSignature()
+    if type(signature) is Sha256WithRsaSignature:
+        dump("signature.signature:", 
+             "<none>" if signature.getSignature().size() == 0
+                      else signature.getSignature().toHex())
+        if signature.getKeyLocator().getType() != None:
+            if (signature.getKeyLocator().getType() == 
+                KeyLocatorType.KEY_LOCATOR_DIGEST):
+                dump("signature.keyLocator: KeyLocatorDigest:",
+                     signature.getKeyLocator().getKeyData().toHex())
+            elif signature.getKeyLocator().getType() == KeyLocatorType.KEYNAME:
+                dump("signature.keyLocator: KeyName:",
+                     signature.getKeyLocator().getKeyName().toUri())
+            else:
+                dump("signature.keyLocator: <unrecognized KeyLocatorType")
+        else:
+            dump("signature.keyLocator: <none>")
+
 
 class TestRepo(object):
 
@@ -42,12 +91,9 @@ class TestRepo(object):
                 "strathmore.1221.seg0",
                 ]
         for name, value in zip(names, values):
-            co = Data(name)
-            co.setContent(value)
-            data = co.wireEncode().toBuffer()
-            print 'co inserted: ', data
-            self.repo.add_content_object_to_repo(name, value)
-        self.repo.print_tree()
+            data = self.repo.wrap_content(name, value)
+            self.repo.add_content_object_to_repo(name, data)
+#        self.repo.print_tree()
         print "test_add_to_repo succeeded"
 
     def test_extract_from_repo(self):
@@ -75,8 +121,13 @@ class TestRepo(object):
                 ]
         for name, expected in zip(names, values):
             interest = Interest(Name(name))
-            data = self.repo.extract_from_repo(interest)
-            print 'co extracted: ', data
+            exclude = Exclude()
+            exclude.appendComponent('room:1451')
+            interest.setExclude(exclude)
+            interest.setChildSelector(0)
+            data = self.repo.extract_from_repo(interest, wired=False)
+            if data:
+                dumpData(data)
         print "test_extract_from_repo succeeded"
 
     def run_tests(self):
@@ -84,7 +135,7 @@ class TestRepo(object):
         self.test_extract_from_repo()
 
 if __name__ == '__main__':
-    tests = TestRepo(clear=True)
-    tests.run_tests()
+#    tests = TestRepo(clear=True)
+#    tests.run_tests()
     tests = TestRepo(clear=False)
     tests.run_tests()

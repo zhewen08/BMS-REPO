@@ -19,9 +19,9 @@
 
 
 from py2neo import neo4j, cypher
-from hashlib import md5
 
 from pyndn import Name
+from pyndn import Exclude
 from pyndn import Data
 from pyndn import ContentType
 from pyndn import KeyLocatorType
@@ -40,7 +40,6 @@ from repo_exceptions import AddToRepoException, NoRootException, \
         UnsupportedQueryException
 
 import os
-import pickle
 import base64
 
 LABEL_COMPONENT = "Component"
@@ -142,11 +141,11 @@ class Repo(object):
         privateKeyStorage.setKeyPairForKeyName(keyName, DEFAULT_PUBLIC_KEY_DER, 
                 DEFAULT_PRIVATE_KEY_DER)
 
-#        keyChain.sign(co, certificateName)
+        keyChain.sign(co, certificateName)
 
         _data = co.wireEncode()
 
-        return _data.toBuffer()
+        return base64.b64encode(_data.toRawStr())
 
     def name_to_path(self, name, wrapped=True):
         """
@@ -258,7 +257,7 @@ class Repo(object):
         """
         name = Name(name).toUri()
         if not wired:
-            data = co.wireEncode()
+            data = co.wireEncode().toRawStr()
         else:
             data = co
         try:
@@ -300,30 +299,12 @@ class Repo(object):
         if not exclude:
             return _nodes
 
-        leading_any = exclude[1] if exclude[0] == 'Any' else None
-        trailing_any = exclude[-2] if exclude[-1] == 'Any' else None
-        for i in range(1, len(exclude) - 1):
-            if exclude[i] == 'Any':
-                inbetween_any.append(exclude[i-1], exclude[i+1])
-
-        def should_exclude(node, exclude=exclude, leading=leading_any, 
-                trailing=trailing_any, inbetween=inbetween_any):
-            comp = Name(node.get_properties()[PROPERTY_COMPONENT])
-            # assert @exclude is a list of Name objects
-            if comp in exclude:
-                return True
-            if leading and comp <= leading:
-                return True
-            if trailing and  comp >= trailing:
-                return True
-            for pair in inbetween:
-                if comp >= pair[0] and comp <= pair[1]:
-                    return True
-            return False
-
         nodes = []
         for node in _nodes:
-            if not should_exclude(node):
+            name = Name()
+            name.set(node.get_properties()[PROPERTY_COMPONENT])
+            comp = name.get(0)
+            if not exclude.matches(comp):
                 nodes.append(node)
 
         return nodes
@@ -337,15 +318,12 @@ class Repo(object):
         this selector does not exist
         """
         if not nodes:
-            return None
-        if len(nodes) == 1:
-            return nodes[0]
-        if not child_selector:
-            return nodes
-        nodes_sorted = sorted(nodes, 
-                key=lambda x:Name('/' + \
+            return []
+
+        nodes.sort(key=lambda x:Name('/' + \
                 str(x.get_properties()[PROPERTY_COMPONENT])))
-        return [nodes_sorted[0]] if child_selector == 0 else [nodes_sorted[-1]]
+        nodes = [nodes[0]] if child_selector == 0 else [nodes[-1]]
+        return nodes
 
     def apply_min_max_suffix_components(self, nodes, 
             min_suffix_components, max_suffix_components):
@@ -374,6 +352,42 @@ class Repo(object):
         nodes = [record.values[0] for record in records.data]
 
         return nodes
+
+    def extract_co_from_db(self, leaf_node, wired=True):
+        try:
+            # by design, there is AT MOST one C2S relation for each node
+            rel = leaf_node.match(RELATION_C2S).next()
+            # we found a content object under the exact given name
+            segment_node = rel.end_node
+            wrapped = eval(segment_node.get_properties()[PROPERTY_WRAPPED])
+            _data = segment_node.get_properties()[PROPERTY_DATA]
+            data = base64.b64decode(_data)
+            if wrapped and not wired:
+                # decode wired co to ContentObject instance
+                co = Data()
+                co.wireDecode(Blob.fromRawStr(data))
+                return co
+            else:
+                # return either wired format co or raw data
+                return data
+        except StopIteration as ex:
+            return None
+
+
+    def apply_key_locator(self, nodes, key_locator):
+        """
+        @param nodes - nodes to be checked
+        @param key_locator - key locator given by the interest
+        checks the given nodes for key locator
+        """
+        if not key_locator:
+            return None
+
+        _nodes = []
+        for node in nodes:
+            co = self.extract_co_from_db(node, wired=False)
+            kl = co.getKeyLocator()
+            # TODO: compare kl with key_locator
 
     def locate_last_node(self, name):
         """
@@ -407,18 +421,14 @@ class Repo(object):
         child_selector = interest.getChildSelector()
         if exclude or child_selector:
             # Exclude
-            # FIXME: assume interest.exclude is a list of components
-            # FIXME: need to test
             nodes = self.apply_exclude(last_node, exclude)
             # ChildSelector
-            # FIXME: can be applied for the immediate next component following
-            # the given prefix only? or until find a co?
-            # FIXME: need to comply with other selectors? e.g. leftmost child is
-            # a co (interest asks for leftmost child), but the interest also asks
-            # for min_suffix_components = 1
             nodes = self.apply_child_selector(nodes, child_selector)
         else:
             nodes = [last_node]
+
+        if not nodes:
+            return None
 
         # MinSuffixComponents
         nodes = self.apply_min_max_suffix_components(nodes, 
@@ -433,9 +443,6 @@ class Repo(object):
         # PublisherPublicKeyLocator - test against a co
         # compares KeyLocator in interest against that in co
         # FIXME: need PyNDN2
-        # TODO: select from nodes_suffix
-
-        # TODO: need a default way to select if cannot decide with the selectors
 
         nodes.sort(
                 key=lambda x:Name('/' + \
@@ -459,26 +466,11 @@ class Repo(object):
             print 'Not matching co found'
             return None
 
+        # by default, return the first(by name) co
         final_node = nodes[0]
 
-        try:
-            # by design, there is AT MOST one C2S relation for each node
-            rel = final_node.match(RELATION_C2S).next()
-            # we found a content object under the exact given name
-            segment_node = rel.end_node
-            wrapped = eval(segment_node.get_properties()[PROPERTY_WRAPPED])
-            _data = segment_node.get_properties()[PROPERTY_DATA]
-            if wrapped and not wired:
-                # decode wired co to ContentObject instance
-                # FIXME: not sure if this is correct
-                co = Data()
-                co.wireDecode(SignedBlob(Blob(_data)))
-                return co
-            else:
-                # return either wired format co or raw data
-                return _data
-        except StopIteration as ex:
-            pass
+        co = self.extract_co_from_db(final_node, wired)
+        return co
 
     @staticmethod
     def parse_co_name(cmd_interest_name):
