@@ -145,7 +145,7 @@ class Repo(object):
 
         _data = co.wireEncode()
 
-        return base64.b64encode(_data.toRawStr())
+        return _data.toRawStr()
 
     def name_to_path(self, name, wrapped=True):
         """
@@ -214,6 +214,7 @@ class Repo(object):
         @param data - data to store under name
         adds a record describing the name and its co (on disk) to graphdb
         """
+        data = base64.b64encode(data)
         path = self.name_to_path(name, wrapped=wrapped)
 
         try:
@@ -246,7 +247,6 @@ class Repo(object):
                     'RETURN c'
             records = neo4j.CypherQuery(self.db_handler, query).execute()
 
-    # TODO: simpler version of add_to_repo
     # insert a content object to repo under given name
     def add_content_object_to_repo(self, name, co, wired=True):
         """
@@ -356,20 +356,21 @@ class Repo(object):
     def extract_co_from_db(self, leaf_node, wired=True):
         try:
             # by design, there is AT MOST one C2S relation for each node
-            rel = leaf_node.match(RELATION_C2S).next()
-            # we found a content object under the exact given name
-            segment_node = rel.end_node
-            wrapped = eval(segment_node.get_properties()[PROPERTY_WRAPPED])
-            _data = segment_node.get_properties()[PROPERTY_DATA]
+            query = 'START s=node(%s)\n' % leaf_node._id + \
+                    'MATCH (s)-[r:%s]->(c)\n' % RELATION_C2S + \
+                    'RETURN c'
+            records = neo4j.CypherQuery(self.db_handler, query).execute()
+            nodes = [record.values[0] for record in records.data]
+            segment_node = nodes[0]
+
+            properties = segment_node.get_properties()
+            wrapped = eval(properties[PROPERTY_WRAPPED])
+            _data = properties[PROPERTY_DATA]
             data = base64.b64decode(_data)
-            if wrapped and not wired:
-                # decode wired co to ContentObject instance
-                co = Data()
-                co.wireDecode(Blob.fromRawStr(data))
-                return co
-            else:
-                # return either wired format co or raw data
-                return data
+            # decode wired co to ContentObject instance
+            co = Data()
+            co.wireDecode(Blob.fromRawStr(data))
+            return co
         except StopIteration as ex:
             return None
 
@@ -403,6 +404,8 @@ class Repo(object):
             print 'Error: extract_from_repo: %s' % str(ex)
 
         records = neo4j.CypherQuery(self.db_handler, query).execute()
+        if not records:
+            return None
         # in the name tree there should be AT MOST one match for a 
         # given name prefix
         assert(len(records.data) == 1)
@@ -459,18 +462,21 @@ class Repo(object):
         """
         # find last node according to given name prefix
         last_node = self.locate_last_node(interest.getName())
+        if not last_node:
+            print 'No matching co found'
+            return None
 
         # apply selectors here. AT MOST one node shall be left 
         nodes = self.apply_selectors(last_node, interest)
         if not nodes:
-            print 'Not matching co found'
+            print 'No matching co found'
             return None
 
         # by default, return the first(by name) co
         final_node = nodes[0]
 
         co = self.extract_co_from_db(final_node, wired)
-        return co
+        return co.wireEncode().toBuffer()
 
     @staticmethod
     def parse_co_name(cmd_interest_name):
@@ -515,3 +521,4 @@ class Repo(object):
                     'MATCH (s)-[r]->()\n' + \
                     'DELETE s, r'
             records = neo4j.CypherQuery(self.db_handler, query).execute()
+            print 'deleted'

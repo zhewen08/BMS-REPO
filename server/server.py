@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 # Copyright (c) 2014 University of California, Los Angeles
 #
 # This program is free software; you can redistribute it and/or modify
@@ -17,58 +15,84 @@
 #
 # Author: Zhe Wen <wenzhe@cs.ucla.edu>
 
-# REPO server
 
-import os
-import sys
-sys.path.append(os.path.abspath('..'))
+import time
+from pyndn import Name
+from pyndn import Data
+from pyndn import Face
+from pyndn.security import KeyType
+from pyndn.security import KeyChain
+from pyndn.security.identity import IdentityManager
+from pyndn.security.identity import MemoryIdentityStorage
+from pyndn.security.identity import MemoryPrivateKeyStorage
+from pyndn.util import Blob
 
-import unittest
+from default_key import DEFAULT_PUBLIC_KEY_DER
+from default_key import DEFAULT_PRIVATE_KEY_DER
 
-from lib.repo import Repo
-from pyndn import NDN, Name, ContentObject, Face
+from repo import Repo
+
+def dump(*list):
+    result = ""
+    for element in list:
+        result += (element if type(element) is str else repr(element)) + " "
+    print(result)
 
 class RepoServer(object):
+    def __init__(self, keyChain, certificateName):
+        self._keyChain = keyChain
+        self._certificateName = certificateName
+        self._responseCount = 0
+        self.repo = Repo()
 
-    def __init__(self, base_name=Name('/ndn/ucla.edu'), clear=False):
-        self.face = Face()
-        self.face.setInterestFilter(base_name, self.on_interest)
-        self.repo = Repo(clear=clear)
+    def onInterest(self, prefix, interest, transport, registeredPrefixId):
+        print 'Interest received: %s' % interest.getName().toUri()
+        self._responseCount += 1
 
-    def on_interest(self, interest):
-        """
-        supports insertion to, extraction from, and deletion from repo
-        """
-        # TODO: determine expected operation by interest name
-        # extraction
-        co = self.repo.extract_from_repo(interest)
-        if not type(co) == ContentObject:
-            # wrap the co here
-        self.face.put(co)
+        # Make and sign a Data packet.
+        encoded_data = self.repo.extract_from_repo(interest)
+        if not encoded_data:
+            data = Data(interest.getName())
+            content = "No match found"
+            data.setContent(content)
+            self._keyChain.sign(data, self._certificateName)
+            encoded_data = data.wireEncode().toBuffer()
 
+        transport.send(encoded_data)
+        print 'sent'
 
-class Client(object):
+    def onRegisterFailed(self, prefix):
+        self._responseCount += 1
+        dump("Register failed for prefix", prefix.toUri())
 
-    def __init__(self):
-        self.face = Face()
-        self.express_interest('/ndn/ucla.edu/building:melnitz/room:1451/seg0')
+def main():
+    face = Face("localhost")
 
-    def express_interest(self, name):
-        self.expressInterest(name, self.on_data, self.on_timeout)
+    identityStorage = MemoryIdentityStorage()
+    privateKeyStorage = MemoryPrivateKeyStorage()
+    keyChain = KeyChain(
+      IdentityManager(identityStorage, privateKeyStorage), None)
+    keyChain.setFace(face)
 
-    def on_data(self, interest, data):
-        print data
+    # Initialize the storage.
+    keyName = Name("/testname/DSK-reposerver")
+    certificateName = keyName.getSubName(0, keyName.size() - 1).append(
+      "KEY").append(keyName[-1]).append("ID-CERT").append("0")
+    identityStorage.addKey(keyName, KeyType.RSA, Blob(DEFAULT_PUBLIC_KEY_DER))
+    privateKeyStorage.setKeyPairForKeyName(
+      keyName, DEFAULT_PUBLIC_KEY_DER, DEFAULT_PRIVATE_KEY_DER)
 
-    def on_timeout(self, interest):
-        print "Timed out: %s" % repr(interest)
+    echo = RepoServer(keyChain, certificateName)
+    prefix = Name("/ndn/ucla.edu/bms")
+    dump("Register prefix", prefix.toUri())
+    face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
 
-    def set_event_loop(self, event_loop):
-        self.event_loop = event_loop
+    while echo._responseCount < 100:
+        face.processEvents()
+        # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
+        time.sleep(0.01)
 
-class Test(unittest.TestCase):
-    def test_request_from_repo(self):
-        server = RepoServer()
-        client = Client()
+    face.shutdown()
 
-        event_loop = 
-
+if __name__ == '__main__':
+    main()

@@ -76,6 +76,7 @@ class TestRepo(object):
     def __init__(self, clear=False):
         self.repo = Repo(clear=clear)
 #        self.repo.print_tree()
+#        exit(0)
 
     def test_add_content_object_to_repo(self):
         names = [
