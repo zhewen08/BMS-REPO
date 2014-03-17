@@ -136,7 +136,7 @@ class TestRepo(object):
         self.test_extract_from_repo()
 
 if __name__ == '__main__':
-#    tests = TestRepo(clear=True)
+    tests = TestRepo(clear=True)
 #    tests.run_tests()
-    tests = TestRepo(clear=False)
+#    tests = TestRepo(clear=False)
     tests.run_tests()

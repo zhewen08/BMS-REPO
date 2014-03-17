@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-1.40.11 (MiKTeX 2.9) (preloaded format=pdflatex 2014.1.18)  19 FEB 2014 15:02
+This is pdfTeX, Version 3.1415926-1.40.11 (MiKTeX 2.9) (preloaded format=pdflatex 2014.1.18)  16 MAR 2014 22:39
 entering extended mode
 **E:/Zhe/30-UCLA/32-NDNREPO/REPO/doc/ndnrepo/main.tex
 (E:/Zhe/30-UCLA/32-NDNREPO/REPO/doc/ndnrepo/main.tex
@@ -488,27 +488,65 @@ Underfull \hbox (badness 1748) in paragraph at lines 13--14
 \OT1/ptm/m/n/10 whose con-tent is Base64-encoded wired for-mat ob-jec-t
  []
 
-) (E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\main.bbl) [2]
-(E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\main.aux) ) 
+) (E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\implementation.tex
+LaTeX Font Info:    Font shape `OMS/ptm/m/it' in size <10> not available
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 14.
+
+Underfull \hbox (badness 1028) in paragraph at lines 26--27
+\OT1/ptm/m/n/10 is con-struct-ed, the pre-fix is s-plit in-to com-po-nents and
+ []
+
+[2]
+Underfull \hbox (badness 10000) in paragraph at lines 28--29
+[]\OT1/ptm/m/n/10 Selectors in-clude Ex-clude, Child-S-e-lec-tor,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 28--29
+\OT1/ptm/m/n/10 Min/MaxSuffixComponents, Pub-lish-er-Pub-licK-ey-Lo-ca-
+ []
+
+
+Underfull \hbox (badness 1635) in paragraph at lines 28--29
+\OT1/ptm/m/n/10 e-qual-i-ty of Pub-lish-er-Pub-licK-ey-Lo-ca-tor and mean-ing o
+f
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 32--33
+[]\OT1/ptm/m/n/10 The or-der of ap-ply-ing s-e-lec-tors is: Ex-
+ []
+
+
+Underfull \hbox (badness 2865) in paragraph at lines 34--35
+[]\OT1/ptm/m/n/10 Min/MaxSuffixComponents. if there is no Ex-
+ []
+
+)
+
+Package balance Warning: You have called \balance in second column
+(balance)                Columns might not be balanced.
+
+[3] (E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\main.aux) ) 
 Here is how much of TeX's memory you used:
- 4622 strings out of 495362
- 65215 string characters out of 3182903
- 142037 words of memory out of 3000000
- 7653 multiletter control sequences out of 15000+200000
+ 4623 strings out of 495362
+ 65260 string characters out of 3182903
+ 141037 words of memory out of 3000000
+ 7654 multiletter control sequences out of 15000+200000
  49805 words of font info for 71 fonts, out of 3000000 for 9000
  14 hyphenation exceptions out of 8191
  41i,9n,38p,912b,315s stack positions out of 5000i,500n,10000p,200000b,50000s
-{C:/Program Files (x86)/
-CTEX/MiKTeX/fonts/enc/dvips/fontname/8r.enc}<C:/Program Files (x86)/CTEX/MiKTeX
-/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Program Files (x86)/CTEX/MiKTeX/
-fonts/type1/urw/helvetic/uhvb8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/t
-ype1/urw/helvetic/uhvr8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/ur
-w/times/utmb8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/urw/times/ut
-mr8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/urw/times/utmri8a.pfb>
-
-Output written on main.pdf (2 pages, 70295 bytes).
+{C:/Program Files (x
+86)/CTEX/MiKTeX/fonts/enc/dvips/fontname/8r.enc}<C:/Program Files (x86)/CTEX/Mi
+KTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Program Files (x86)/CTEX/MiK
+TeX/fonts/type1/urw/helvetic/uhvb8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fon
+ts/type1/urw/helvetic/uhvr8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type
+1/urw/times/utmb8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/urw/time
+s/utmr8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/urw/times/utmri8a.
+pfb>
+Output written on main.pdf (3 pages, 80661 bytes).
 PDF statistics:
- 34 PDF objects out of 1000 (max. 8388607)
+ 37 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

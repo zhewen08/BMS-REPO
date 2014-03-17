@@ -114,8 +114,8 @@ UCLA Computer Science, Los Angeles, CA 90095}
 
 %\input{abstract}
 \input{intro}
-%\input{design}
-%\input{implementation}
+\input{design}
+\input{implementation}
 %\input{evaluation}
 %\input{discuss}
 %\input{related}

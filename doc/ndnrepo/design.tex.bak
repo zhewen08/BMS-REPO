@@ -12,27 +12,10 @@ Nodes and relations, both can come with a type and multiple schema free properti
 
 For example, given 6-component name ``/ndn/ucla.edu/melnitz/1451/power/seg0'', we use accordingly 6 ``Component'' type nodes to represent each component with the ``component'' property that stores the component content. Specifically, node (root:Component \{component:``ndn''\}) is store in the graph database for the first (root) component. Similarly, node (comp:Component \{component:``ucla.edu''\}) is for the second component. To store the actual content object under this name, we exploit another ``Segment'' type node. This node is attached to the leaf ``Component'' node and has a ``file'' property whose content is Base64-encoded wired format object data. For instance, node (data:Segment \{file:``<Base64-endcoding-data>''\}) stores the actual content object in wire format.
 
-2 types of relations are used to connect graph nodes. The ``CONTAINS_COMPONENT'' relation connects one name component to the next name component. One example is the relation connecting component \emph{root} and component \emph{comp} in above example. The ``CONTAINS_SEGMENT'' relation connects the leaf name component  to the actual content object data node. In above example component \emph{leaf} (leaf:Component \{component:``seg0''\}) and segment \emph{data}, which does not corresponds to any component in the name, are connected with this relation.
+2 types of relations are used to connect graph nodes. The ``CONTAINS\_COMPONENT'' relation connects one name component to the next name component. One example is the relation connecting component \emph{root} and component \emph{comp} in above example. The ``CONTAINS\_SEGMENT'' relation connects the leaf name component  to the actual content object data node. In above example component \emph{leaf} (leaf:Component \{component:``seg0''\}) and segment \emph{data}, which does not corresponds to any component in the name, are connected with this relation.
 
-Differentiating nodes of components and nodes of content object data facilitates identifying the content of a node. The name/selectors based search is limited in the isolated name tree consisting of mere ``Component'' nodes connected by ``CONTAINS_COMPONENT'' relations.
+Differentiating nodes of components and nodes of content object data facilitates identifying the content of a node. The name/selectors based search is limited in the isolated name tree consisting of mere ``Component'' nodes connected by ``CONTAINS\_COMPONENT'' relations. Once we find a node that fulfills all selector requirements under the specified name prefix, its ``CONTAINS\_SEGMENT'' relation directly leads to the content object data requested. In this design, each node has \emph{at most} one outgoing ``CONTAINS\_SEGMENT'' relation.
 
-\begin{itemize}
-\item
-Overview: Provide a brief overview at the beginning
-\item
-What, How, Why: For each component of the solution, clearly elaborate
-   \begin{enumerate}
-      \item
-      What the issues/challenges to address?
-      \item
-      How the solution component works?
-      \item
-      Why choose such a solution approach?
-      \item
-      There are many ways to address the same issue, why this one? Provides cons and pros for this one
-   \end{enumerate}
-\item
-Novelty, novelty, novelty!
-Explain why the solution is different, not necessarily better
-Tell readers why it is different from the related work when describing each component of the solution
-\end{itemize} 
+\subsection{Content Object Data}
+
+The content object data is stored as the ``file'' property of the ``Segment'' nodes. Ideally the wire format content object is supposed to be stored as binary data in the node. However, we need to use Base64-encoded data for storage due to limit of the Python binding exploited in the prototype. 

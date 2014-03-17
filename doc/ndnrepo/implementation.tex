@@ -1,19 +1,50 @@
 \section{Implementation}
+
+In this section, we discuss the implementation details of the neo4j based REPO prototype.
+
+\subsection{Interact with Neo4j}
+
+%use cypher statement to do insertion/deletion/lookup
+Neo4j is a world-leading graph database with full ACID support. Neo4j comes natively in Java and is built on top of native graph storage. Therefore the logic structure of neo4j nodes and relations is reflected in the underlying storage exactly the same way.
+
+We chose py2neo, a Python binding for neo4j database, to implement our REPO prototype. py2neo interacts with neo4j server with the Cypher query language, which to neo4j is as SQL to relational database, via neo4j server's RESTful API.
+
+Cypher query language provides readable and flexible interaction with neo4j. We introduce the 4 most frequently involved Cypher clauses in our prototype as follows:
 \begin{itemize}
-\item
-What are challenges for the implementation?
-\item
-How does it address each challenge in the implementation?
-\item
-What are the software/hardware platforms for the implementation?
-\item
-Complexity of the implementation?
+    \item START. Every query describes a pattern, and in that pattern one can have multiple starting points. A starting point is a relationship or a node where a pattern is anchored. We use the START statement to describe the starting point of the pattern we search for such that the unnecessary patterns (with the incorrect starting point can be avoided). \emph{START n=node(\{ids\})} identifies the starting point by the internal node id of neo4j.
+    \item CREATE UNIQUE. CREATE UNIQUE is in the middle of MATCH and CREATE: it will match what it can, and create what is missing. CREATE UNIQUE will always make the least change possible to the graph: if it can use parts of the existing graph, it will. \emph{CREATE UNIQUE \{pattern\}} creates the unique pattern described by \{pattern\}.
+    \item MATCH. MATCH is the primary way of getting data from the database into the current set of bindings. The MATCH clause allows you to specify the patterns Cypher will search for in the database. \emph{MATCH \{pattern\}} searches the graph database for the pattern described by \{pattern\}.
+    \item DELETE. Deleting graph elements, i.e. nodes and relationships, is done with DELETE. We first use the MATCH clause to search the graph database, and then use the DELETE clause to delete the matching patterns. Note that if any end node of a relation is removed, this relation should also be removed. \emph{MATCH p=\{pattern\} DELETE p} deletes all patterns described by \{pattern\}.
+\end{itemize}
+
+In the following subsections, we describe in detail how we implement content object lookup, insertion, and deletion with above clauses.
+
+\subsection{Content Object Lookup}
+
+We use a 2-step method to look up a content object specified by the interest, i.e. a name prefix plus a number of selectors.
+
+We first search for the designated pattern specified by the name prefix. Following the way the graph database is constructed, the prefix is split into components and therefore path by connecting them with the ``CONTAINS\_COMPONENT'' relation. This search starts from the root component ``ndn'' with the START clause, which guarantees we do not take part of another branch not from the root in the name tree by mistake. If there is no match found, lookup finished without finding a match. Otherwise, the selectors are applied if any before we have the final result. By the hierarchical naming scheme, the matching node is identical should there be any.
+
+Selectors include Exclude, ChildSelector, Min/MaxSuffixComponents, PublisherPublicKeyLocator, and MustBeFresh. Due to the difficulty in defining equality of PublisherPublicKeyLocator and meaning of MustBeFresh in the REPO, we only consider Exclude, ChildSelector, and Min/MaxSuffixComponents. 
+
+The selectors are applied sequentially as follows:
 \begin{itemize}
-\item
-e.g., lines of code
-\item
-Does it work with other existing software/hardware platforms?
-\item
-If not, is it easy to export it to these platforms?
+    \item The order of applying selectors is: Exclude/ChildSelector $\rightarrow$ Min/MaxSuffixComponents
+    \item Exclude/ChildSelector. both apply to the immediate continuation component of the given prefix in the interest. Should either of them presence, handle them first. The result of applying these 2 selectors is that from the given prefix, branches are pruned.
+    \item Min/MaxSuffixComponents. if there is no Exclude/ChildeSelector, simply return all content objects that fall into the requested range; otherwise, return all content objects that fall into the requested range and are on the branches NOT PRUNED. If there if on suffix component selector, simply assume MinSuffixComponents = 0 and MaxSuffixComponents = 64 (virtually infinite).
+    \item If multiple content objects qualify (after applying all available selectors), select the minimum one by canonical ordering.
 \end{itemize}
-\end{itemize}
+
+\subsection{Content Object Insertion}
+
+The REPO prototype provides support for inserting both raw content and content object in wire format. For raw content, it will first be wrapped as a content object (signed) before encoded into wire format. This is done by PyNDN2 library.
+
+To insert a wire format content object into neo4j, it is first encoded into a string with base64 encoding, given py2neo and neo4j does not have very good support for binary data operation. Once base64 encoded, the wire format content object can be treated as a property of a SEGMENT node and therefore inserted into neo4j.
+
+When looked up, base64 decoding is needed before having the wire format content object available.
+
+\subsection{Content Object Deletion}
+
+Deletion is done in a very similar way to lookup. We delete content objects by an interest: all content objects that match an interest, i.e. all content objects left in the lookup procedure, will be deleted. This can be easily done with the DELETE clause.
+
+One thing to note is that both insertion and deletion should be done via command interests. The current REPO prototype only provides support for related neo4j operations (insert/delete). To fully support command interests, parsing command interests is needed. 

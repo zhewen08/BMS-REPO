@@ -1,7 +1,7 @@
-This is pdfTeX, Version 3.1415926-1.40.11 (MiKTeX 2.9) (preloaded format=pdflatex 2012.10.11)  12 DEC 2012 15:03
+This is pdfTeX, Version 3.1415926-1.40.11 (MiKTeX 2.9) (preloaded format=pdflatex 2014.1.18)  16 MAR 2014 11:31
 entering extended mode
-**D:/Zhe/40-UCLA/paper-template/implementation.tex
-(D:/Zhe/40-UCLA/paper-template/implementation.tex
+**E:/Zhe/30-UCLA/32-NDNREPO/REPO/doc/ndnrepo/implementation.tex
+(E:/Zhe/30-UCLA/32-NDNREPO/REPO/doc/ndnrepo/implementation.tex
 LaTeX2e <2009/09/24>
 Babel <v3.8l> and hyphenation patterns for loaded.
 ! Undefined control sequence.
@@ -16,10 +16,10 @@ End of file on the terminal!
  
 Here is how much of TeX's memory you used:
  7 strings out of 495362
- 212 string characters out of 3182902
+ 251 string characters out of 3182903
  44825 words of memory out of 3000000
  3272 multiletter control sequences out of 15000+200000
  3640 words of font info for 14 fonts, out of 3000000 for 9000
  14 hyphenation exceptions out of 8191
- 5i,0n,1p,76b,8s stack positions out of 5000i,500n,10000p,200000b,50000s
+ 5i,0n,1p,89b,8s stack positions out of 5000i,500n,10000p,200000b,50000s
 !  ==> Fatal error occurred, no output PDF file produced!

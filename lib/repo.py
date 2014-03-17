@@ -368,9 +368,12 @@ class Repo(object):
             _data = properties[PROPERTY_DATA]
             data = base64.b64decode(_data)
             # decode wired co to ContentObject instance
+#            if not wired:
             co = Data()
             co.wireDecode(Blob.fromRawStr(data))
             return co
+#            else:
+#                return data
         except StopIteration as ex:
             return None
 
@@ -476,7 +479,7 @@ class Repo(object):
         final_node = nodes[0]
 
         co = self.extract_co_from_db(final_node, wired)
-        return co.wireEncode().toBuffer()
+        return co
 
     @staticmethod
     def parse_co_name(cmd_interest_name):

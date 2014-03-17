@@ -31,6 +31,48 @@ from default_key import DEFAULT_PUBLIC_KEY_DER
 from default_key import DEFAULT_PRIVATE_KEY_DER
 
 from repo import Repo
+from pyndn import ContentType
+from pyndn import KeyLocatorType
+from pyndn import Sha256WithRsaSignature
+
+def dumpData(data):
+    dump("name:", data.getName().toUri())
+    if data.getContent().size() > 0:
+        # Use join to convert each byte to chr.
+        dump("content (raw):", "".join(map(chr, data.getContent().buf())))
+        dump("content (hex):", data.getContent().toHex())
+    else:
+        dump("content: <empty>")
+    if not data.getMetaInfo().getType() == ContentType.BLOB:
+        dump("metaInfo.type:",
+             "LINK" if data.getMetaInfo().getType() == ContentType.LINK
+             else "KEY" if data.getMetaInfo().getType() == ContentType.KEY
+             else "uknown")
+    dump("metaInfo.freshnessPeriod (milliseconds):",
+         data.getMetaInfo().getFreshnessPeriod()
+         if data.getMetaInfo().getFreshnessPeriod() >= 0 else "<none>")
+    dump("metaInfo.finalBlockID:",
+         data.getMetaInfo().getFinalBlockID().toEscapedString()
+         if data.getMetaInfo().getFinalBlockID().getValue().size() >= 0 
+         else "<none>")
+    signature = data.getSignature()
+    if type(signature) is Sha256WithRsaSignature:
+        dump("signature.signature:", 
+             "<none>" if signature.getSignature().size() == 0
+                      else signature.getSignature().toHex())
+        if signature.getKeyLocator().getType() != None:
+            if (signature.getKeyLocator().getType() == 
+                KeyLocatorType.KEY_LOCATOR_DIGEST):
+                dump("signature.keyLocator: KeyLocatorDigest:",
+                     signature.getKeyLocator().getKeyData().toHex())
+            elif signature.getKeyLocator().getType() == KeyLocatorType.KEYNAME:
+                dump("signature.keyLocator: KeyName:",
+                     signature.getKeyLocator().getKeyName().toUri())
+            else:
+                dump("signature.keyLocator: <unrecognized KeyLocatorType")
+        else:
+            dump("signature.keyLocator: <none>")
+
 
 def dump(*list):
     result = ""
@@ -57,6 +99,9 @@ class RepoServer(object):
             data.setContent(content)
             self._keyChain.sign(data, self._certificateName)
             encoded_data = data.wireEncode().toBuffer()
+        else:
+            dumpData(encoded_data)
+            encoded_data = encoded_data.wireEncode().toBuffer()
 
         transport.send(encoded_data)
         print 'sent'
