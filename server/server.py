@@ -84,12 +84,10 @@ class RepoServer(object):
     def __init__(self, keyChain, certificateName):
         self._keyChain = keyChain
         self._certificateName = certificateName
-        self._responseCount = 0
         self.repo = Repo()
 
     def onInterest(self, prefix, interest, transport, registeredPrefixId):
         print 'Interest received: %s' % interest.getName().toUri()
-        self._responseCount += 1
 
         # Make and sign a Data packet.
         encoded_data = self.repo.extract_from_repo(interest)
@@ -107,7 +105,6 @@ class RepoServer(object):
         print 'sent'
 
     def onRegisterFailed(self, prefix):
-        self._responseCount += 1
         dump("Register failed for prefix", prefix.toUri())
 
 def main():
@@ -132,7 +129,7 @@ def main():
     dump("Register prefix", prefix.toUri())
     face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
 
-    while echo._responseCount < 100:
+    while True: 
         face.processEvents()
         # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
         time.sleep(0.01)
