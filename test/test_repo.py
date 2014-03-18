@@ -75,10 +75,11 @@ class TestRepo(object):
 
     def __init__(self, clear=False):
         self.repo = Repo(clear=clear)
-#        self.repo.print_tree()
-#        exit(0)
+        print 'Original Data:'
+        self.repo.print_tree()
 
     def test_add_content_object_to_repo(self):
+        print 'Testing Insertion ...'
         names = [
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg0",
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1",
@@ -94,22 +95,12 @@ class TestRepo(object):
         for name, value in zip(names, values):
             data = self.repo.wrap_content(name, value)
             self.repo.add_content_object_to_repo(name, data)
-#        self.repo.print_tree()
-        print "test_add_to_repo succeeded"
+            print 'Inserted Name: %s Value: %s' % (name, value)
+        self.repo.print_tree()
 
     def test_extract_from_repo(self):
-#        names = [
-#                "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg0",
-#                "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1",
-#                "/ndn/ucla.edu/bms/building:strathmore/room:1221/seg0",
-#                "/ndn/ucla.edu/bms/building:melnitz/room:1453/seg0",
-#                ]
-#        values = [
-#                "melnitz.1451.seg0",
-#                "metlnitz.1451.seg1",
-#                "melnitz.1453.seg0",
-#                "strathmore.1221.seg0",
-#                ]
+        print 'Testing Extraction ...'
+        print 'Exclude room:1451 ChildSelector 1'
         names = [
                 "/ndn/ucla.edu/bms/building:melnitz",
                 "/ndn/ucla.edu/bms/building:melnitz/room:1451",
@@ -127,13 +118,39 @@ class TestRepo(object):
             interest.setExclude(exclude)
             interest.setChildSelector(0)
             data = self.repo.extract_from_repo(interest, wired=False)
-            if data:
-                dumpData(data)
-        print "test_extract_from_repo succeeded"
+            if not data:
+                data = 'no match found'
+            else:
+                data = data.getContent().toRawStr()
+            print 'Extracted Name: %s Value: %s' % (name, data)
+
+    def test_delete_from_repo(self):
+        print 'Testing Deletion ...'
+        print 'Exclude room:1451 ChildSelector 1'
+        names = [
+                "/ndn/ucla.edu/bms/building:melnitz",
+                "/ndn/ucla.edu/bms/building:melnitz/room:1451",
+                "/ndn/ucla.edu/bms/building:melnitz/room:1451/seg1",
+                ]
+        values = [
+                "melnitz.1451.seg0",
+                "metlnitz.1451.seg0",
+                "metlnitz.1451.seg1",
+                ]
+        for name, expected in zip(names, values):
+            interest = Interest(Name(name))
+            exclude = Exclude()
+            exclude.appendComponent('room:1451')
+            interest.setExclude(exclude)
+            interest.setChildSelector(1)
+            self.repo.delete_from_repo(interest)
+            print 'Deleted Name: %s' % name
+        self.repo.print_tree()
 
     def run_tests(self):
         self.test_add_content_object_to_repo()
         self.test_extract_from_repo()
+        self.test_delete_from_repo()
 
 if __name__ == '__main__':
     tests = TestRepo(clear=True)

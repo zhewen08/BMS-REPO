@@ -391,7 +391,6 @@ class Repo(object):
         for node in nodes:
             co = self.extract_co_from_db(node, wired=False)
             kl = co.getKeyLocator()
-            # TODO: compare kl with key_locator
 
     def locate_last_node(self, name):
         """
@@ -443,13 +442,6 @@ class Repo(object):
         if not nodes:
             return None
 
-        # MustBeFresh - test against a co
-        # ignored in REPO
-
-        # PublisherPublicKeyLocator - test against a co
-        # compares KeyLocator in interest against that in co
-        # FIXME: need PyNDN2
-
         nodes.sort(
                 key=lambda x:Name('/' + \
                 str(x.get_properties()[PROPERTY_COMPONENT])))
@@ -466,13 +458,11 @@ class Repo(object):
         # find last node according to given name prefix
         last_node = self.locate_last_node(interest.getName())
         if not last_node:
-            print 'No matching co found'
             return None
 
         # apply selectors here. AT MOST one node shall be left 
         nodes = self.apply_selectors(last_node, interest)
         if not nodes:
-            print 'No matching co found'
             return None
 
         # by default, return the first(by name) co
@@ -481,22 +471,22 @@ class Repo(object):
         co = self.extract_co_from_db(final_node, wired)
         return co
 
-    @staticmethod
-    def parse_co_name(cmd_interest_name):
-        """
-        @param cmd_interest_name - name contained in the command interest
-        @return Name() instance of the co's name
-        parses the command interest name for the name prefix of the co
-        """
-        _name = str(cmd_interest_name)
-        assert('delete' in _name)
-        try:
-            _co_name = _name.split('delete')[2]
-        except Exception as ex:
-            print 'parse_co_name: %s' % str(ex)
-        assert(_co_name)
-        co_name = Name(_co_name)
-        return co_name
+#    @staticmethod
+#    def parse_co_name(cmd_interest_name):
+#        """
+#        @param cmd_interest_name - name contained in the command interest
+#        @return Name() instance of the co's name
+#        parses the command interest name for the name prefix of the co
+#        """
+#        _name = str(cmd_interest_name)
+#        assert('delete' in _name)
+#        try:
+#            _co_name = _name.split('delete')[2]
+#        except Exception as ex:
+#            print 'parse_co_name: %s' % str(ex)
+#        assert(_co_name)
+#        co_name = Name(_co_name)
+#        return co_name
 
     def delete_from_repo(self, interest):
         """
@@ -504,24 +494,30 @@ class Repo(object):
         deletes content objects either by precise name, or by prefix plus
         selectors
         """
-        # TODO: test this function
-        co_name = self.parse_co_name(interest.getName())
+#        co_name = self.parse_co_name(interest.getName())
 
         # by name prefix
         # by interest
         # find last node according to given name prefix
-        last_node = self.locate_last_node(co_name)
+        last_node = self.locate_last_node(interest.getName())
+        if not last_node:
+            return None
 
         # apply selectors here. AT MOST one node shall be left 
         nodes = self.apply_selectors(last_node, interest)
+        if not nodes:
+            return None
 
-        if nodes:
-            _ids = []
-            for node in nodes:
-                _ids.append(str(node._id))
-            ids = ','.join(_ids)
-            query = 'START s=node(%s)\n' % ids + \
-                    'MATCH (s)-[r]->()\n' + \
-                    'DELETE s, r'
-            records = neo4j.CypherQuery(self.db_handler, query).execute()
-            print 'deleted'
+        _ids = []
+        for node in nodes:
+            node.isolate()
+            node.delete()
+#            _ids.append(str(node._id))
+#        ids = ','.join(_ids)
+#
+#        query = 'START s=node(%s)\n' % ids + \
+#                'MATCH (s)-[r]->()\n' + \
+#                'DELETE r\n' + \
+#                'DELETE s'
+#        print query
+#        records = neo4j.CypherQuery(self.db_handler, query).execute()
