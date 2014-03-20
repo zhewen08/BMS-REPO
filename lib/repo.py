@@ -442,9 +442,10 @@ class Repo(object):
         if not nodes:
             return None
 
-        nodes.sort(
-                key=lambda x:Name('/' + \
-                str(x.get_properties()[PROPERTY_COMPONENT])))
+        # no need to have a specific order
+#        nodes.sort(
+#                key=lambda x:Name('/' + \
+#                str(x.get_properties()[PROPERTY_COMPONENT])))
 
         return nodes
 

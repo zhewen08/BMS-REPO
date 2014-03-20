@@ -25,7 +25,7 @@ We use a 2-step method to look up a content object specified by the interest, i.
 
 We first search for the designated pattern specified by the name prefix. Following the way the graph database is constructed, the prefix is split into components and therefore path by connecting them with the ``CONTAINS\_COMPONENT'' relation. This search starts from the root component ``ndn'' with the START clause, which guarantees we do not take part of another branch not from the root in the name tree by mistake. If there is no match found, lookup finished without finding a match. Otherwise, the selectors are applied if any before we have the final result. By the hierarchical naming scheme, the matching node is identical should there be any.
 
-Selectors include Exclude, ChildSelector, Min/MaxSuffixComponents, PublisherPublicKeyLocator, and MustBeFresh. Due to the difficulty in defining equality of PublisherPublicKeyLocator and meaning of MustBeFresh in the REPO, we only consider Exclude, ChildSelector, and Min/MaxSuffixComponents. 
+Selectors include Exclude, ChildSelector, Min/MaxSuffixComponents, PublisherPublicKeyLocator, and MustBeFresh. Due to the difficulty in defining equality of PublisherPublicKeyLocator and meaning of MustBeFresh in the REPO, we only consider Exclude, ChildSelector, and Min/MaxSuffixComponents.
 
 The selectors are applied sequentially as follows:
 \begin{itemize}
@@ -47,4 +47,4 @@ When looked up, base64 decoding is needed before having the wire format content 
 
 Deletion is done in a very similar way to lookup. We delete content objects by an interest: all content objects that match an interest, i.e. all content objects left in the lookup procedure, will be deleted. This can be easily done with the DELETE clause.
 
-One thing to note is that both insertion and deletion should be done via command interests. The current REPO prototype only provides support for related neo4j operations (insert/delete). To fully support command interests, parsing command interests is needed. 
+One thing to note is that both insertion and deletion should be done via command interests. The current REPO prototype only provides support for related neo4j operations (insert/delete). To fully support command interests, parsing command interests is needed.

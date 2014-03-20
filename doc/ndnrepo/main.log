@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-1.40.11 (MiKTeX 2.9) (preloaded format=pdflatex 2014.1.18)  16 MAR 2014 22:39
+This is pdfTeX, Version 3.1415926-1.40.11 (MiKTeX 2.9) (preloaded format=pdflatex 2014.1.18)  20 MAR 2014 10:15
 entering extended mode
 **E:/Zhe/30-UCLA/32-NDNREPO/REPO/doc/ndnrepo/main.tex
 (E:/Zhe/30-UCLA/32-NDNREPO/REPO/doc/ndnrepo/main.tex
@@ -450,14 +450,16 @@ Underfull \hbox (badness 10000) in paragraph at lines 24--25
 []\OT1/ptm/m/n/10 REPO API set. sup-port for RE-PO in-ser-
  []
 
-) (E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\design.tex [1{C:/Program Files (x
-86)/CTEX/UserData/pdftex/config/pdftex.map{Unicode.sfd}{UGBK.sfd}}
+) (E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\design.tex
+! I can't write on file `main.pdf'.
+Please type another file name for output: 
+[1{C:/Program Files (x86)/CTEX/UserData/pdftex/config/pdftex.map{Unicode.sfd}{U
+GBK.sfd}}
 
 
 ]
 LaTeX Font Info:    Try loading font information for OMS+ptm on input line 13.
-
-("C:\Program Files (x86)\CTEX\MiKTeX\tex\latex\psnfss\omsptm.fd"
+ ("C:\Program Files (x86)\CTEX\MiKTeX\tex\latex\psnfss\omsptm.fd"
 File: omsptm.fd 
 )
 LaTeX Font Info:    Font shape `OMS/ptm/m/n' in size <10> not available
@@ -530,7 +532,7 @@ Package balance Warning: You have called \balance in second column
 [3] (E:\Zhe\30-UCLA\32-NDNREPO\REPO\doc\ndnrepo\main.aux) ) 
 Here is how much of TeX's memory you used:
  4623 strings out of 495362
- 65260 string characters out of 3182903
+ 65256 string characters out of 3182903
  141037 words of memory out of 3000000
  7654 multiletter control sequences out of 15000+200000
  49805 words of font info for 71 fonts, out of 3000000 for 9000
@@ -544,7 +546,7 @@ ts/type1/urw/helvetic/uhvr8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type
 1/urw/times/utmb8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/urw/time
 s/utmr8a.pfb><C:/Program Files (x86)/CTEX/MiKTeX/fonts/type1/urw/times/utmri8a.
 pfb>
-Output written on main.pdf (3 pages, 80661 bytes).
+Output written on .pdf (3 pages, 80648 bytes).
 PDF statistics:
  37 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)

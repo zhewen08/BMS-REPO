@@ -18,4 +18,4 @@ Differentiating nodes of components and nodes of content object data facilitates
 
 \subsection{Content Object Data}
 
-The content object data is stored as the ``file'' property of the ``Segment'' nodes. Ideally the wire format content object is supposed to be stored as binary data in the node. However, we need to use Base64-encoded data for storage due to limit of the Python binding exploited in the prototype. 
+The content object data is stored as the ``data'' property of the ``Segment'' nodes. Ideally the wire format content object is supposed to be stored as binary data in the node. However, we need to use Base64-encoded data for storage due to limit of the Python binding exploited in the prototype. 
